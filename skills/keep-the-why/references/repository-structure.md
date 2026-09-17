@@ -6,50 +6,54 @@ Where things go: the default layout, which file a piece of knowledge belongs in,
 
 ```text
 project/
-├── AGENTS.md
-├── AGENTS.local.md          # not committed
-├── .keep-the-why             # this skill's own project config, committed
-├── docs/
+├── README.md                 # what is this, should I care, how do I start
+├── CHANGELOG.md              # what changed, in which release
+├── CONTRIBUTING.md           # how a change gets in, which conventions apply
+├── LICENSE
+├── AGENTS.md                 # entry point for agents: pointers and short rules
+├── CLAUDE.md                 # @AGENTS.md import, for tools that read CLAUDE.md instead
+├── .keep-the-why             # this skill's project config, committed
+├── pyproject.toml            # or package.json, Cargo.toml, … — dependencies, build
+├── docs/                     # how to configure, operate, troubleshoot
 │   ├── index.md
-│   ├── setup.md
-│   ├── usage.md
-│   ├── testing.md
-│   └── troubleshooting.md
-└── context/
-    ├── README.md              # short, GitHub renders it when someone browses the folder cold
-    ├── AGENTS.md               # guard: invoke this skill before editing, don't hand-write the schema
-    ├── CLAUDE.md               # @AGENTS.md import
-    ├── index.md
-    ├── architecture.md
-    ├── <topic>.md            # one per recurring theme, named for the theme, not the file it touches
-    └── incidents.md
+│   └── …
+├── tests/                    # what the code is supposed to do, executably
+└── context/                  # why it is built this way, what was tried and rejected
+    ├── README.md             # short, GitHub renders it when someone browses the folder cold
+    ├── AGENTS.md             # guard: invoke this skill before editing, don't hand-write the schema
+    ├── CLAUDE.md             # @AGENTS.md import
+    ├── index.md              # one line per topic file
+    └── <topic>.md            # one per recurring theme, named for the theme, not the file it touches
 ```
 
-This skill's own personal config lives at `~/.keep-the-why/<id>.md`, outside the project entirely — never part of the repo, not shown above. See `references/setup.md`.
+Keep the Why creates `.keep-the-why` and `context/`. Everything else is what a project usually has already — shown so the routing table below has something to point at, not as files this skill creates or requires. This skill's own personal config lives at `~/.keep-the-why/<id>.md`, outside the project entirely — never part of the repo, not shown above. See `references/setup.md`.
 
-Adjust freely. A one-file script doesn't need six `docs/` files. `context/` stays flat — no subdirectories — even for a large project; if topic files alone stop scaling, namespace filenames instead (e.g. `auth-tokens.md` and `auth-oauth.md`, or `tokens-auth.md` and `oauth-auth.md` — prefix or suffix, whichever groups and sorts more usefully for that project) rather than nesting `context/auth/`. The shape should track the project's actual complexity, not a template.
+Adjust freely. A one-file script doesn't need a `docs/` folder or a changelog, and the layout of `docs/` and `tests/` is the project's own. `context/` stays flat — no subdirectories — even for a large project; if topic files alone stop scaling, namespace filenames instead (e.g. `auth-tokens.md` and `auth-oauth.md`, or `tokens-auth.md` and `oauth-auth.md` — prefix or suffix, whichever groups and sorts more usefully for that project) rather than nesting `context/auth/`. The shape should track the project's actual complexity, not a template.
 
 ## Which file does this belong in?
 
-A project accumulates several files that all explain *something*: README, `docs/`, `CONTRIBUTING.md`, `context/`, `AGENTS.md`, `AGENTS.local.md`, and often a separate `CHANGELOG.md` (Keep the Why doesn't generate this one, but routing decisions still need to account for it). Content ending up in the wrong one — or copied into more than one — is exactly the kind of redundancy this skill should prevent, not add to.
+A project accumulates several files that all explain *something*: README, `docs/`, `CHANGELOG.md`, `CONTRIBUTING.md`, the tests, the build manifest, `AGENTS.md`, the Git history, and `context/` (Keep the Why owns only the last one, but routing decisions still need to account for all of them). Content ending up in the wrong one — or copied into more than one — is exactly the kind of redundancy this skill should prevent, not add to.
 
 The routing question is always **who is reading this, and what do they need to do next**:
 
 | File | Reader | Question it answers |
 |---|---|---|
-| `README.md` | Someone evaluating whether to use this at all | What is this, should I care, how do I get started |
+| `README.md` | Someone evaluating whether to use this at all, a new developer, an agent on first contact | What is this, should I care, how do I get started |
 | `docs/` | Someone actively using it | How do I configure, operate, or troubleshoot this |
+| `CHANGELOG.md` | Someone upgrading or reviewing, an agent reconstructing the past | What changed, in which release |
 | `CONTRIBUTING.md` | Someone about to change the code | How do I set up a dev environment, what are the conventions, how does a PR get reviewed |
+| `LICENSE`, `SECURITY.md`, `CODE_OF_CONDUCT.md` | Everyone | Under which terms, how do I report a vulnerability, how do we behave |
+| `tests/` | Developers, CI, an agent checking its own work | What the code is supposed to do, executably |
+| `pyproject.toml`, `package.json`, `Cargo.toml`, … | Build tools, someone setting the project up | What does this depend on, how is it built and published |
+| `AGENTS.md` (`CLAUDE.md` and other tool-specific files) | Any agent working in the repo | Where to look first, which conventions to follow — a pointer and short rules, not the content itself |
+| Git history | Anyone who digs | Who changed what, when, in which commit |
 | `context/` | Anyone (human or agent) about to change something and needing to know why first | Why is this built the way it is, what was tried and rejected |
-| `CHANGELOG.md` | Someone tracking what changed between versions | What changed, in which release |
-| `AGENTS.md` | Any agent working in the repo | Where to look — a pointer, not the content itself |
-| `AGENTS.local.md` | This one specific developer | Personal, local, not relevant to anyone else |
 
 When recording something, resolve it to exactly one of these — then have every other file that would naturally mention it *point* to that one, not restate it. A README's contributing section should be a one-line link to `CONTRIBUTING.md`, not a partial copy of its dev-setup steps; `docs/installation.md` (for end users installing a release) and `CONTRIBUTING.md`'s dev-setup section (for contributors setting up from source) can overlap in steps without one having to explain the other's context — link between them if the overlap is substantial enough that keeping both in sync matters.
 
 **An embedded procedure isn't why-content, even when it surfaces alongside a real decision.** A `context/` entry can legitimately explain *why* something is true (a platform limitation, a constraint) while also carrying a *workaround* for it — but the workaround itself ("if X, do Y") is an instruction, not rationale, and belongs wherever the table above already routes instructions (`CONTRIBUTING.md` for a dev/maintainer procedure, `docs/` for an end-user one), not inside the `context/` entry. The same split applies to a rule that has no rationale behind it at all — "keep the CHANGELOG's headings deduplicated," "sort these alphabetically because it reads cleaner" — record the rule where its reader needs it (`AGENTS.md` if it's something an agent working in the repo should just follow, `CONTRIBUTING.md` if it's aimed at contributors); don't manufacture a Decision/Reason/Rejected-alternative structure for a preference that has none.
 
-When something genuinely doesn't fit the table above (e.g. security disclosure process, a code of conduct), that's a signal it's a different kind of artifact — governance or legal, not comprehension — and outside what this skill routes for. Don't force it into `context/` just because there's nowhere else obvious to put it.
+`LICENSE`, `SECURITY.md` and `CODE_OF_CONDUCT.md` are governance and legal, not comprehension — they are in the table so they are recognized, not because this skill writes or routes into them. When something genuinely doesn't fit any row, that's a signal it's a different kind of artifact and outside what this skill routes for. Don't force it into `context/` just because there's nowhere else obvious to put it.
 
 ## `AGENTS.md` — example
 
@@ -58,7 +62,6 @@ When something genuinely doesn't fit the table above (e.g. security disclosure p
 
 - Usage docs: see `docs/index.md`
 - Why things are the way they are: see `context/index.md`
-- If `AGENTS.local.md` exists in this repo, read that too — personal/local notes.
 
 Read `context/index.md` before making non-trivial changes to understand
 prior decisions and avoid re-litigating or accidentally reverting them.
