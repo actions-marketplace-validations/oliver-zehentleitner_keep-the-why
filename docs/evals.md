@@ -53,8 +53,8 @@ What a single pass count hides — four numbers, per run:
 "Skill loaded" is short only by the never-opted-in fixtures —
 `organic-activation-no-config-proposes-nothing` in all three runs,
 `init-retracted-writes-nothing` in run 3 — where nothing is supposed to load
-it; all four of those sessions passed. No genuine activation miss in the
-series, the second series in a row.
+it; all four of those sessions passed. Every session that was supposed to
+load the skill did, the second series in a row.
 
 Judge and deterministic checks agreed on all 264 gradings, as in the 0.16.2
 series. The 58 checks passed 58/58 in every run; all five failures were the
@@ -174,7 +174,8 @@ stays one case wide and this page stays one agent deep.
 
 A single "73/73" runs four different things together, and the run history
 below shows why that matters: the 2026-08-25 row's 56/70 was mostly the skill
-never being loaded, not the skill misbehaving. Every run since 2026-09-05 reports
+never being loaded — the fixture had no start path yet — not the skill
+misbehaving. Every run since 2026-09-05 reports
 them apart, in `summary.md`:
 
 | Number | What it measures | Decided by |
@@ -222,6 +223,38 @@ and `deductions`, one entry per point below 10. `summary.md` shows one row
 per case, passes included, with the deductions in the last column: a 9 says
 where the point went without anyone re-reading the transcript.
 
+## How a series is judged
+
+A full run is 88 samples of a sampled agent graded by a sampled judge —
+neither Claude Code nor the judge call can be pinned to a seed — so the same
+case takes a different path every time: a different first search hit, one
+progress note more or less, a question phrased the other way round. Measured
+over 19 consecutive full runs on 2026-09-16/17, while the wording of the
+next release was being worked out (Claude Sonnet 5, 1,672 gradings): 98.6 % of case runs passed, 1.2 cases failed per run, and two of
+the 19 runs were a clean 88/88. The cases that flipped had passed 20 to 29
+times before and were a different one almost every run. At that per-case
+rate a clean run is the exception and three clean runs in a row are dice,
+not a property of the skill — and chasing them makes the skill worse: of the
+sentences added to `SKILL.md` for a case that had failed once, three tipped
+a neighbouring case that had never failed before.
+
+So a release series — three consecutive full runs — is judged as a whole,
+by `tools/evals/series.py`:
+
+| | Rule | What a failure means |
+|---|---|---|
+| Per case | every case passes at least 2 of the 3 runs | the same case failing twice is a wording problem: read both transcripts, fix the sentence or the expectation, measure the case 6× before and after |
+| Per run | no run has more than 1 failed case | a run with several failures is a regression or an environment problem, not variance: find out which before measuring again |
+
+A case that fails once in a series is reported, with the judge's reason, in
+the per-case table above — it is variance until it comes back. The pass
+counts stay the headline because they are what the run history compares.
+The rule is tied to today's models: as per-case reliability rises the same
+two lines get harder to miss, not easier, and the numbers in the run history
+will say when they can be tightened. And if you find a way to phrase this
+skill so that the suite passes 100 % three times in a row without making
+the cases easier, I would be glad to see that pull request.
+
 ## Run history
 
 The judge has so far always been the same model as the agent under test.
@@ -242,7 +275,7 @@ The judge has so far always been the same model as the agent under test.
 | 2026-09-03 | 0.11.0 | Claude Code 2.1.258 / 2.1.259 | Claude Sonnet 5 | **73/73 · 72/74 · 71/74 · 73/74** | first run before case 74 existed; then three consecutive full runs on a clean host — the table above. Suite changed afterwards: `init: declined` retired (its two cases replaced/removed), `autostart-project-instruction-loads-skill` added |
 | 2026-09-02 | 0.10.1 + compressed `SKILL.md` | Claude Code 2.1.258 | Claude Sonnet 5 | 62/73, 61/73 | the compression moved nothing — 64/72 before it |
 | 2026-08-31 | 0.9.2 + config relocation | Claude Code 2.1.251 | Claude Sonnet 5 | 64/72 | regression check for `.keep-the-why` |
-| 2026-08-25 | 0.9.0 | Claude Code 2.1.241 | Claude Sonnet 5 | 56/70 | no activation aid; 11 of 14 failures were the skill never being loaded — re-run with a project-scoped `SessionStart` hook ([`references/autostart.md`](https://keepthewhy.com/autostart/)): 10/10 of those loaded, 9/10 passed. Every run since carries that hook in the `_base` fixture |
+| 2026-08-25 | 0.9.0 | Claude Code 2.1.241 | Claude Sonnet 5 | 56/70 | no start path in the fixture yet; 11 of 14 failures were the skill never being loaded — re-run with a project-scoped `SessionStart` hook ([`references/autostart.md`](https://keepthewhy.com/autostart/)): 10/10 of those loaded, 9/10 passed. Every run since carries that hook in the `_base` fixture |
 | 2026-07-31 | 0.6.2 | Claude Code | Claude Sonnet 5 | 59/67 | first full run |
 
 ## Caveats, stated plainly

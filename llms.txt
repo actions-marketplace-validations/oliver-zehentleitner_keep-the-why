@@ -103,8 +103,8 @@ from the root `plugin.json` used by GitHub's Copilot CLI plugin marketplace form
 Also a Cursor plugin (`.cursor-plugin/plugin.json` + `rules/keep-the-why.mdc`, a rule that loads
 the skill only in a workspace carrying `.keep-the-why`); Cursor marketplace submission pending.
 
-A Skill activates when something in the conversation matches its description, not
-automatically on session start. After installing, start a new session and tell the agent
+Until a start path is configured (autostart, below), a Skill is loaded when something in
+the conversation matches its description, not on session start. After installing, start a new session and tell the agent
 something like "initialize Keep the Why in this project" to run the one-time setup wizard -
 setup on a brand-new project only ever runs from a request like this, never from an unrelated
 question the skill's description happens to match; that's a deliberate gate, not a speed
@@ -154,8 +154,9 @@ only the rationale it produces. Live-tested against a real methodology-style fra
 worked correctly once explicitly invoked, but didn't reliably self-trigger the moment a design
 decision settled mid-conversation on its own. Asking directly afterward ("check whether
 keep-the-why applies here") is a reasonable fallback, not a workaround for something broken.
-Getting the skill loaded at session start is the agent's job, and the skill documents three
-start paths for it (every session machine-wide via a hook, the project asks via a hook or a
+With a start path in place the skill is loaded in every session (measured on Claude Code,
+and the maintainer's daily experience). Getting it loaded is the agent's job — no skill can
+load itself — and the skill documents three start paths for it (every session machine-wide via a hook, the project asks via a hook or a
 "Keep the Why" section in its entry-point file, or only when a developer asks), with per-agent
 sections stating what is verified how: Claude Code, Codex CLI, opencode and Cline by eval
 (the section loads the skill unprompted 3 of 3 times each, against 0 or 1 of 3 without it),

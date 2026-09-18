@@ -4,14 +4,25 @@ Loading is not acting. Once loaded, the skill does nothing in a project that
 has no `.keep-the-why` unless a developer explicitly asks to set it up
 (`setup.md`, "Detection and the two independent wizards") — so every start
 path below either gates on that file or *is* the developer asking. What a
-start path decides is only whether the skill is in the session at all before
-the first request, instead of hoping the agent's own skill discovery matches
-the conversation against `SKILL.md`'s description.
+start path decides is only whether the skill is in the session before the
+first request, rather than when the conversation matches `SKILL.md`'s
+description.
+
+With a start path in place the skill is loaded in every session — this
+works completely, not sometimes. What no skill can do is load itself: a
+skill package is instructions, no agent tool gives a skill a way to load
+itself, and the open Agent Skills spec has no cross-tool start mechanism —
+this is true of every skill, not of this one. Loading is therefore the
+agent's job, configured once by a person with the agent's own means, and the
+skill hands that job over explicitly: the wizard asks which start path the
+project wants and has the agent set up what its platform offers. With one
+in place the skill is in the session before the first request; the per-tool
+sections below say what was measured, and how.
 
 Referenced by `setup.md`'s wizard (the start-path question and step 2), not a
 mandate. Each entry states what was actually verified and how, so "listed
-here" never gets mistaken for "guaranteed to work for you". Growing and
-incomplete by design — a pull request adding a verified example for a tool
+here" means "measured", nothing less. One section per verified tool, and
+it grows that way — a pull request adding a verified example for a tool
 that isn't here yet is welcome any time; for anything else, [open a new
 issue](https://github.com/oliver-zehentleitner/keep-the-why/issues/new).
 
