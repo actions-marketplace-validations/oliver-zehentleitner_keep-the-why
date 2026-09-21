@@ -3,7 +3,7 @@
 ## "Composition with other skills" needed an explicit re-check instruction, found via real testing
 
 **Type:** incident
-**Status:** active
+**Status:** superseded
 **Evidence:** confirmed
 
 Added a second paragraph to "Composition with other skills": checking whether Keep the Why applies isn't a one-time, start-of-turn decision — re-check specifically at the natural end of another skill's workflow step (a design settled, a root cause confirmed, an alternative rejected), since that's exactly when capture-worthy content has just been produced.
@@ -18,6 +18,8 @@ Added a second paragraph to "Composition with other skills": checking whether Ke
 
 **Reported:** filed as [obra/superpowers#2051](https://github.com/obra/superpowers/issues/2051) — framed explicitly as an observation about their own bootstrap's stated behavior, not a request to change anything for a third-party skill (their `CLAUDE.md` is explicit that third-party-specific asks belong in a separate plugin, not core). Not a marketplace listing, so it doesn't belong in the "Also listed on" tables — a compatibility finding, tracked here instead.
 
+**Superseded 2026-09-04:** the explanation above ("the other framework holds attention through its own workflow") was wrong, and this project no longer tracks compatibility with specific frameworks at all. A scripted re-test of the same scenario (fresh headless sessions, four turns, the model asked after each run why it had or hadn't invoked this skill) showed: without any activation mechanism the skill was not invoked by one model in any run, with or without the other framework installed — the control without it failed identically, so the framework isn't the cause; once this skill was already in context via the `SessionStart` hook from `references/autostart.md`, the re-check described in "Composition with other skills" happened in every run, right after the other framework's TDD step — nothing suppressed it. The gap is skill discovery on the agent side (matching a trigger phrase to one named skill and stopping, plus not reading the repo's own guard files), not attention. Consequence for this project: the FAQ entry about the framework was removed, and the answer for anyone combining this skill with a workflow framework is the same as for everyone else — set up activation per `references/autostart.md`, and ask directly as the fallback. The upstream issue was closed from our side with the measurements attached; whether their bootstrap's wording changes is their call.
+
 ## Activation reliability is left to each agent tool, not solved by this project
 
 > Superseded 2026-08-01: the project init wizard now actively asks about this and has the current agent set up whatever its own platform supports — see "The wizard now asks about activation reliability" below. The reasoning below for *why the project doesn't hardcode one tool's mechanism* still holds; what changed is that the wizard now prompts and delegates to the current agent's own platform knowledge, instead of staying entirely passive on the topic.
@@ -28,7 +30,7 @@ Added a second paragraph to "Composition with other skills": checking whether Ke
 
 Keep the Why doesn't build, recommend, or document a specific mechanism (e.g. a Claude Code `SessionStart` hook) to make its own Skill activate more reliably at session start. Whether and how to strengthen activation is left entirely to each agent tool's own capabilities and the developer's own setup.
 
-**Reason:** the underlying limitation is real and independently confirmed twice — the Superpowers re-check gap above, and the eval suite's "activation gap" failures (`docs/evals.md`). Checked directly rather than assumed: the open Agent Skills spec recognizes only `name` and `description` in frontmatter, no cross-tool "autostart" field exists, and even within Claude Code specifically there's no deterministic force-invoke mechanism — tracked upstream as an open, acknowledged gap ([anthropics/claude-code#65371](https://github.com/anthropics/claude-code/issues/65371)). Community workarounds exist for Claude Code specifically (a `SessionStart` hook injecting a reminder, ideally scoped per-project by checking for the `keep-the-why:config` marker rather than firing unconditionally) and measurably help — but they're Claude-Code-specific by construction, since hooks aren't part of the open Skill format other supported agents (Codex CLI, Gemini CLI, Cursor, ...) implement.
+**Reason:** the underlying limitation is real and independently confirmed twice — the discovery gap above (its original explanation since retracted, see that entry's 2026-09-04 update), and the eval suite's "activation gap" failures (`docs/evals.md`). Checked directly rather than assumed: the open Agent Skills spec recognizes only `name` and `description` in frontmatter, no cross-tool "autostart" field exists, and even within Claude Code specifically there's no deterministic force-invoke mechanism — tracked upstream as an open, acknowledged gap ([anthropics/claude-code#65371](https://github.com/anthropics/claude-code/issues/65371)). Community workarounds exist for Claude Code specifically (a `SessionStart` hook injecting a reminder, ideally scoped per-project by checking for the `keep-the-why:config` marker rather than firing unconditionally) and measurably help — but they're Claude-Code-specific by construction, since hooks aren't part of the open Skill format other supported agents (Codex CLI, Gemini CLI, Cursor, ...) implement.
 
 **Rejected alternative:** document and recommend a specific hook script as part of this project's own installation guidance. Rejected — this project deliberately stays cross-agent (same underlying principle as "No name-by-name comparison" in `positioning.md`, applied here to mechanisms instead of marketing copy): prescribing one vendor's mechanism as official guidance would misrepresent it as more solved, or more this project's job to fix, than it actually is. A tool-specific way to strengthen its own Skill activation belongs in that tool's own documentation and the individual developer's own setup, not in a repo-native, cross-agent convention.
 
@@ -50,6 +52,26 @@ The project init wizard (`references/setup.md`) now asks, as its last question, 
 
 **Update 2026-08-25:** `references/autostart.md` now exists — a growing collection of positive, verified examples per agent tool, starting with a Claude Code `SessionStart` hook backed by an actual eval measurement (0/10 → 10/10 activation on the affected cases, see `docs/evals.md`'s "Activation-gap follow-up"). This doesn't change who decides — the current agent still checks its own platform and decides what, if anything, to set up, exactly as above — it just gives that decision real, checked examples to draw on for tools someone has already verified something for, instead of only ever improvising from scratch. Still empty for every tool besides Claude Code; still not a mandate. The "Consequence" paragraph above's pointer to a tracking issue is stale: that issue (#138) is now closed — a real methodology exists instead of an open-ended search for one, so ongoing contributions go directly against `references/autostart.md` (a pull request with a verified example) rather than a discussion issue; a genuinely new problem gets its own fresh issue.
 
+**Update 2026-09-03:** the documented Claude Code hook now also matches a project still on the legacy `<!-- keep-the-why:config -->` block in `AGENTS.md`, and its injected text says "invoke the keep-the-why skill (Skill tool) now" rather than "load". Both came out of the eval suite: the migration case had never once loaded the skill because the hook only knew the new file location, and "load" was read as advice where "invoke the Skill tool" is read as an instruction (`docs/evals.md`, "Latest full-suite results"). Same position as above otherwise — one verified example, not a mandate.
+
+
+## Three start paths, all gated on `.keep-the-why`
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer decision 2026-09-04; eval case `autostart-project-instruction-loads-skill` and its same-day control (`docs/evals.md`); one live Hermes run
+
+`references/autostart.md` now defines how the skill gets loaded as three start paths rather than a list of per-tool tricks: every session machine-wide (developer-level, gated on the file), the project asks (a project-scoped hook where the tool has one, and/or a "Keep the Why" section in the entry-point file that any agent reading it follows), or only when a developer asks. Per-agent sections say which paths are verified how. The wizard's last question offers the three paths; the entry-point section is the one thing the wizard may write into `AGENTS.md`.
+
+**Reason:** the skill does nothing without `.keep-the-why` (or an explicit setup request), so loading it is only worth anything on an opted-in project — every path therefore gates on the file, and "load it always" is deliberately not one of the paths: it would put `SKILL.md` into every session of every project for nothing. The entry-point section exists because hooks are per-tool and only verified for Claude Code, while every agent reads its entry-point file — and it is the natural home for a pinned, vendored skill, since it names the exact `SKILL.md` the project committed. Measured before being listed as verified: with the section and no hook, Claude Code invoked the skill first in 3 of 3 runs on a plain code question; without the section, 0 of 3.
+
+**Rejected alternative:** an unconditional session-start load (no file check). Rejected — context cost in every unrelated project, for a skill that would then do nothing.
+
+**Rejected alternative:** keep the entry-point file untouched under all circumstances (the previous step-6 rule in `setup.md`). Rejected — that rule protected against the skill writing its *state* there, which `.keep-the-why` now holds; a start instruction the project explicitly chose is the project's own editorial content, like the badge.
+
+**Consequence:** the entry-point section is instruction-following, not a hook — verified on Claude Code (eval) and Hermes (single live run), listed as "should work" everywhere else until someone measures it. The eval runner's non-Claude drivers hand the skill over explicitly and so can't measure this path; a measurement there needs a driver option to skip that hand-over.
+
 ## Project setup only ever runs from an explicit request, never from an organic activation
 
 **Type:** decision
@@ -65,4 +87,36 @@ An organic activation — the skill's own broad description happening to match a
 
 **Rejected alternative:** keep proposing setup on organic activation, but only once per project, remembering the decline (the design this replaces). Rejected — this still means the very first organic activation in a never-opted-in project interrupts with a setup question nobody asked for; remembering not to ask again is a mitigation, not a fix for the actual complaint.
 
-**Consequence:** `init: declined` still exists, but with a narrower job — it no longer needs to suppress organic re-asking (the gate already does that unconditionally), it only prevents a *later, separate* explicit request-then-retraction on the same project from re-running the wizard from scratch if resumed. See `references/setup.md`'s "Detection and the two independent wizards." This also makes a related, independently-reported finding largely moot: an agent that once substituted the skill's own `init: declined` mechanism with Claude Code's own out-of-repo auto-memory feature to suppress being asked again (issue #198) had nothing to suppress in the first place once organic activation stopped proposing setup — there's no longer a recurring, unwanted question to route around.
+**Consequence (superseded 2026-09-04, see the next entry):** at the time, `init: declined` was kept with a narrower job — preventing a later explicit request-then-retraction from re-running the wizard from scratch. That job turned out to be empty (the same section said a fresh explicit request should ask again regardless), and the flag was retired. The related finding about an agent substituting Claude Code's auto-memory for the flag (issue #198) resolves the same way: there is nothing of the skill's own to record at that moment.
+
+## `init: declined` retired: a called-off setup request writes nothing
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer decision 2026-09-04, after the three full eval runs of 2026-09-03 (`docs/evals.md`, run history); [#198](https://github.com/oliver-zehentleitner/keep-the-why/issues/198)
+
+When an explicit setup request is declined at the first question or retracted in the same sentence, the wizard stops and writes nothing — no `.keep-the-why`, no `id`, no marker anywhere. Earlier versions wrote a `.keep-the-why` carrying `init: declined`.
+
+**Reason:** since setup only ever starts from an explicit request (entry above), there is no unprompted question left for a "don't ask again" flag to suppress; and the section describing the flag also said a fresh explicit request should run the wizard regardless of it. A flag that neither suppresses nor blocks anything is a leftover of a change not carried through. It also had a real cost: the file it created is exactly what `.keep-the-why`-gated autostart hooks key on, so a project that had just said no got the skill loaded on every session from then on. The eval case that required writing the flag flipped in 2 of 3 runs for a reason unrelated to the skill's logic — a retracted request reads to the agent as "nothing to do", so the skill was never loaded and the agent used its own memory instead — which is what exposed the flag as pointless.
+
+**Rejected alternative:** force the skill to load on any prompt naming it (a `UserPromptSubmit` hook) so the flag gets written reliably. Rejected — it would have made the agent reliably write a file the developer had just declined; the mechanism it protected was the problem, not the activation.
+
+**Rejected alternative:** sharpen the skill's `description` so retracted requests still trigger it. Rejected for the same reason, plus the description is the most expensive real estate in the skill and the effect would be unmeasurable at the eval's sample size.
+
+**Consequence:** no compatibility path for existing files carrying the value — deliberately. Such a file is a leftover of a setup that never happened; the skill treats it as an unrecognized `init` value and asks, the linter reports it, and the fix is deleting the file. Silently accepting it would have kept a retired concept alive in two places for the sake of a handful of files. The personal wizard doesn't run on a called-off setup either — its file is keyed by the project `id`, which only exists once the project is set up.
+
+## The skill description names complaints, feedback and settings about the skill itself
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** issue #355, measured 2026-09-10
+**Revisit when:** a harness matches skills on something other than the description, or the description hits a length limit
+
+`SKILL.md`'s frontmatter description ends with "Also the place for complaints, feedback and settings changes about this skill itself."
+
+**Reason:** the frustration eval case ("this keep-the-why skill is really starting to bug me") failed only in sessions where the skill was never loaded: the agent answered in one turn from the hook's hint and the config files, and pointed the user at the agent tool's own issue tracker, the nearest URL it knew. The skill holds the right tracker and the settings that cause the nagging, so a complaint about the skill is the one request where loading it is least optional — and the one where a model is most inclined to skip the thing being complained about. The description is what harnesses with description-based matching read to decide; naming complaints there gives the match a reason. Measured on the case: 2 of 3 and then 1 of 3 with the feedback sentence sharpened alone (every failure unloaded), 5 of 5 with the description extended (skill loaded first every time).
+
+**Rejected alternative:** sharpening the session hook's text ("whatever the first request is about — a complaint about this skill included"). Rejected because the hook text is committed in every project that uses path 2 and copied in the eval fixture; a change there is a rollout, and it would fix only harnesses that have the hook, while the description reaches every harness that reads it.
+

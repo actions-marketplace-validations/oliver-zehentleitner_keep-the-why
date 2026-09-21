@@ -1,5 +1,5 @@
 site_name: Keep the Why
-site_description: Keep the Why is a repo-native convention and agent skill that preserves the reasoning behind a codebase as a byproduct of working with your agent — so it stops re-suggesting rejected approaches, gives better answers, speeds up onboarding, and makes legacy projects tractable again.
+site_description: "Project memory for coding agents and humans: the reasoning behind a codebase as Markdown in the repo, versioned by Git, so nothing rejected is proposed twice."
 site_url: https://keepthewhy.com
 repo_url: https://github.com/oliver-zehentleitner/keep-the-why
 repo_name: oliver-zehentleitner/keep-the-why
@@ -33,8 +33,18 @@ plugins:
   - include-markdown
 
 markdown_extensions:
+  - attr_list
   - md_in_html
   - pymdownx.superfences
+
+hooks:
+  - tools/mkdocs/context_pages.py
+
+copyright: '<a href="/imprint/">Imprint</a> · <a href="/license/">License</a>'
+
+not_in_nav: |
+  imprint.md
+  license.md
 
 extra_css:
   - assets/extra.css
@@ -53,13 +63,15 @@ extra:
 
 nav:
   - Overview: index.md
+  - README: readme.md
   - Philosophy: philosophy.md
   - Installation: installation.md
   - Repository structure: repository-structure.md
-  - Security: security.md
+  - Specification: specification.md
   - Linting: linting.md
+  - Dashboard: dashboard.md
+  - Security: security.md
   - Evals: evals.md
-  - Agent & model matrix: agent-matrix.md
   - Badge: badge.md
   - FAQ: faq.md
   - Why I built this: why.md
@@ -80,8 +92,5 @@ nav:
       - Legacy project: examples/legacy-project.md
       - Developer handover: examples/developer-handover.md
   - "Why this project is built this way":
-      - Release and distribution: context/release-and-distribution.md
-      - Skill configuration format: context/config-format.md
-      - Entry and layout format: context/entry-format.md
-      - Positioning: context/positioning.md
-      - Compatibility: context/compatibility.md
+      - "Read this project's context/": context/index.md
+      - "See it in the dashboard ↗": https://keepthewhy.com/dashboard/live/

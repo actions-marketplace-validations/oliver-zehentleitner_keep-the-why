@@ -1,18 +1,14 @@
 # Installation
 
-Keep the Why is a repo-native convention and agent skill; this page installs the agent skill — a `SKILL.md` file, following the open, cross-agent skill format, not tied to one vendor. No build step, no external service, no database, no MCP server.
+Keep the Why is the why layer of [repo-native project memory](https://oliver-zehentleitner.github.io/repo-native-project-memory/): the reasoning behind a codebase, kept as Markdown in the repository and versioned by Git, for coding agents and humans. What you install is the **agent skill** that captures and maintains it — a `SKILL.md` with its reference files, in the open, cross-agent skill format, not tied to one vendor. No build step, no service, no database, no account. The [linter](linting.md) and the [dashboard](dashboard.md) are separate, optional packages; the skill installs neither.
 
-## Trust and scope
+The short version, for any of 70+ agents (Claude Code, Codex, OpenCode, …), pinned to the newest release:
 
-Before installing anything that runs inside an agent, know what you're actually getting:
+```bash
+npx skills add https://github.com/oliver-zehentleitner/keep-the-why/tree/latest/skills/keep-the-why
+```
 
-- **No executable code.** The skill package (`skills/keep-the-why/`) is instructions only — `SKILL.md`, `references/*.md`, `examples/*.md`. No scripts, no binaries.
-- **No network access of its own.** There's nothing to run, so there's nothing that calls out anywhere. Whatever network access exists is your agent's own, not something this skill adds.
-- **No external services.** No database, no MCP server, no account, no API key.
-- **Install a tagged release, not `main`.** `main` is where active development happens and isn't guaranteed release-ready at any given moment — installing without pinning tracks it directly. A `latest` tag always points to the newest release, moved automatically by CI whenever one ships. Every install method below shows how to pin to it (or to an exact version, for full reproducibility).
-- **Updating is explicit**, never automatic — see "Updating" below.
-
-None of that substitutes for actually reading `SKILL.md` yourself before installing — see "Recommended: GitHub CLI" below for `gh skill preview`, which lets you do exactly that.
+Then start a session in a project and say "set up Keep the Why here" — the [first activation](#verifying-it-loaded) runs a short setup. Every other way to install, how to verify and update, and what exactly you are putting into your agent, follows.
 
 ## Recommended: skills CLI
 
@@ -30,17 +26,6 @@ npx skills add oliver-zehentleitner/keep-the-why
 
 Either form prompts for which of its 70+ supported agents (Claude Code, Codex, OpenCode, and more) and scope (project or personal) to install for, then installs via symlink or copy, your choice. Also listed on [skills.sh](https://skills.sh/oliver-zehentleitner/keep-the-why/keep-the-why).
 
-## Also listed on
-
-| Name | Info |
-|---|---|
-| [ASM](https://luongnv.com/asm/#/skills/oliver-zehentleitner%2Fkeep-the-why%3A%3Askills%2Fkeep-the-why%3A%3Akeep-the-why) | Curated skill index for the `asm` CLI; installable via `asm install keep-the-why` |
-| [awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills#context-engineering) | Listed under "Context Engineering" |
-| [GitHub Copilot plugin marketplace](https://awesome-copilot.github.com/plugin/keep-the-why/) | Installable via `copilot plugin install keep-the-why@awesome-copilot` |
-| [MCP Market](https://mcpmarket.com/tools/skills/keep-the-why) | Skill marketplace listing |
-| [skills.sh](https://skills.sh/oliver-zehentleitner/keep-the-why/keep-the-why) | Backs the `npx skills add` install method above |
-| [SkillsLLM](https://skillsllm.com/skill/keep-the-why) | Verified, passed [SkillsLLM's security scan](https://skillsllm.com/security-check/IPmNycVdbOyq) |
-
 ## Also recommended: GitHub CLI
 
 With [`gh`](https://cli.github.com/) v2.90.0 or later — `gh skill` is [in public preview](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/add-skills) and subject to change:
@@ -49,7 +34,7 @@ With [`gh`](https://cli.github.com/) v2.90.0 or later — `gh skill` is [in publ
 gh skill preview oliver-zehentleitner/keep-the-why keep-the-why
 ```
 
-GitHub's own guidance: skills aren't verified by GitHub and may contain prompt injections, hidden instructions, or malicious scripts — inspect before installing. Keep the Why ships instructions only, no executable scripts; see [Security](security.md) for what that means in practice, including an independent SkillsLLM scan. Then, pinned to a release:
+GitHub's own guidance: skills aren't verified by GitHub and may contain prompt injections, hidden instructions, or malicious scripts — inspect before installing. The Keep the Why package ships no scripts; the linter it can install is covered on [Security](security.md), along with an independent SkillsLLM scan. Then, pinned to a release:
 
 ```bash
 gh skill install oliver-zehentleitner/keep-the-why keep-the-why@latest
@@ -72,6 +57,42 @@ asm install github:oliver-zehentleitner/keep-the-why#latest:skills/keep-the-why 
 ```
 
 Replace `<tool>` with your agent (`claude`, `codex`, `opencode`, `cline`, `gemini`, and more — run `asm install --help` for the full list). Replace `#latest` with an exact [tag](https://github.com/oliver-zehentleitner/keep-the-why/releases) to pin to a specific version instead of always the newest, or drop it to track `main` directly.
+
+## Also installable: Claude Code plugin
+
+Claude Code installs plugins from a *marketplace* — a repository carrying `.claude-plugin/marketplace.json` — and this repository is its own one-plugin marketplace (`.claude-plugin/plugin.json` and `marketplace.json` at the root, the skill under `skills/`). Two commands, in a shell:
+
+```bash
+claude plugin marketplace add oliver-zehentleitner/keep-the-why --sparse .claude-plugin skills
+claude plugin install keep-the-why@keep-the-why
+```
+
+or the same inside a session: `/plugin marketplace add oliver-zehentleitner/keep-the-why`, then `/plugin install keep-the-why@keep-the-why`. `--sparse .claude-plugin skills` limits the checkout to what the plugin needs — about 0.6 MB instead of the whole repository with its docs, linter, evals and dashboard. Append `#<release tag>` to the repository to pin it — `oliver-zehentleitner/keep-the-why#v0.17.1`, or `#latest` for the newest release; 0.17.1 is the first tag that carries the marketplace file; without a ref Claude Code follows the default branch, and `claude plugin marketplace update keep-the-why` followed by `claude plugin update keep-the-why@keep-the-why` refreshes it. `claude plugin details keep-the-why@keep-the-why` shows what was installed: one skill, no hooks, no agents, no MCP servers, under a hundred always-on tokens per session. Verified on Claude Code 2.1.273 with the shell commands, against a local path and against GitHub with a branch ref; the slash commands are the documented equivalent and were not run separately. The plugin ships the skill only — the [start path](autostart.md) is still written by the setup, into the project.
+
+## Also installable: GitHub Copilot CLI plugin
+
+Keep the Why is listed in the [Awesome Copilot marketplace](https://awesome-copilot.github.com/plugin/keep-the-why/), which Copilot CLI and VS Code have registered by default:
+
+```bash
+copilot plugin install keep-the-why@awesome-copilot
+```
+
+On an older Copilot CLI that reports the marketplace as unknown, register it once first: `copilot plugin marketplace add github/awesome-copilot`. The listing pins an exact release tag — immutable by the marketplace's own rule — and is bumped by a pull request there with every release of the skill, so it can trail a new release by the time their review takes. The commands are the marketplace's own ([its README](https://github.com/github/awesome-copilot#install-a-plugin)); the listing is checked with every release, the install itself was not run by this project. For Copilot without the plugin route, the skill directory in the table under "Fallback: manual clone" works as for any other agent.
+
+## Also installable: Codex plugin
+
+Codex CLI installs plugins from a *marketplace* — a repository carrying `.agents/plugins/marketplace.json` — and this repository is its own one-plugin marketplace (`.codex-plugin/plugin.json` at the root, the skill under `skills/`). Two commands:
+
+```bash
+codex plugin marketplace add oliver-zehentleitner/keep-the-why
+codex plugin add keep-the-why@keep-the-why
+```
+
+Add `--ref v0.17.1` (any [release tag](https://github.com/oliver-zehentleitner/keep-the-why/releases)) to the first command to pin a version; without it Codex snapshots the default branch, and `codex plugin marketplace upgrade` refreshes it. The plugin lands under `~/.codex/plugins/cache/keep-the-why/`, and a new session lists the skill as `keep-the-why:keep-the-why`. Verified 2026-09-08 with Codex CLI 0.149.0, from a local path and from GitHub. `codex plugin remove keep-the-why@keep-the-why` uninstalls it; the skill-directory route below works for Codex too, and does not copy the whole repository.
+
+## Also installable: Cursor plugin
+
+The repository is a [Cursor Plugin](https://cursor.com/docs/plugins): `.cursor-plugin/plugin.json` at the root, the skill under `skills/`, and one rule, `rules/keep-the-why.mdc`. The rule is always on once the plugin is installed and does one thing: in a workspace whose root carries a `.keep-the-why` file it loads the skill before anything else, the way the session hook does for Claude Code (see [autostart](https://github.com/oliver-zehentleitner/keep-the-why/blob/main/skills/keep-the-why/references/autostart.md)); in any other workspace it does nothing, and it never sets Keep the Why up unasked. Marketplace submission is pending Cursor's review; until the listing exists, install from a clone: `git clone --depth 1 https://github.com/oliver-zehentleitner/keep-the-why ~/.cursor/plugins/local/keep-the-why`, restart Cursor, then **Customize → Install**, project or user scope. A real directory, not a symlink — Cursor's docs suggest the symlink, but a symlinked local plugin is not loaded ([cursor/plugins#35](https://github.com/cursor/plugins/issues/35), open since March 2026). The skill-directory route below (`.cursor/skills/keep-the-why`) works without the plugin and without the rule. Verified 2026-09-10 in Cursor 3.19.19: with `.keep-the-why` the skill loads before the first answer, without it nothing happens; what was run is in [autostart](https://github.com/oliver-zehentleitner/keep-the-why/blob/main/skills/keep-the-why/references/autostart.md).
 
 ## Fallback: manual clone
 
@@ -105,6 +126,11 @@ Start a new session afterward so the skill is picked up.
 
 `docs/` and `context/` (the structure the skill produces in *your* project — see [repository structure](repository-structure.md)) are plain Markdown — no skill runtime is required to read them. Anything that browses or indexes a repository works with the output directly, including read-only tools that never run the skill themselves — for example **[DeepWiki](https://deepwiki.com/)** (Cognition, the makers of Devin), which generates a browsable wiki for any public repo by analyzing its code *and* existing docs, citing them directly. A project with a populated `context/` gives DeepWiki (and anything like it) real rationale to cite instead of having to infer everything from code alone. The skill automates keeping this current; the result is still useful on its own even where the skill itself isn't installed anywhere.
 
+## Verifying it loaded
+
+Until a project has a start path configured ([autostart](autostart.md) — which setup offers to write), a Skill is loaded when something in the conversation matches its description, not the moment a session starts; so the very first activation is one you ask for. Start a session in a project where the skill is installed and say so directly — "initialize Keep the Why in this project" or similar — to run the one-time setup wizard. For a brand-new project, this is the only path that works: an organic activation (asking something the skill's description happens to match, e.g. "why does this workaround exist, and can you document it?") answers the question but deliberately doesn't propose or run setup on its own — see `references/setup.md`'s "Detection and the two independent wizards" for why. Once a project already has `.keep-the-why`, an organic activation works normally for everything else (continuous capture, retrospective recovery, and so on) — the gate only applies to first-time setup. If it doesn't seem to activate at all even when asked directly, double-check that `SKILL.md` sits directly inside the skill folder (not nested deeper) and that the folder name matches `name: keep-the-why` in the frontmatter exactly.
+
+This one sentence, once per project, is the only thing you ever have to say. It is needed for the first activation only, because setup never starts on its own in a project that has not opted in. After it, capture runs by itself: the agent records the why as it surfaces and asks only when it is unsure — nobody has to tell it what to write down. Setup creates a `.keep-the-why` file at the project root (where `context/` lives, that setup is complete), checked by this skill directly at the start of every later session — `AGENTS.md` itself is left untouched; mentioning Keep the Why anywhere a human would read it (a README section, the badge) is the project's own call, not something setup writes in. Every session after the first one picks the project back up on its own; there's nothing project-specific to repeat — and with a start path written by setup, the skill is loaded before the first request rather than when the conversation happens to match it.
 ## Updating
 
 Re-run whichever install command you used the first time. If you pinned to `latest`, that's enough — it always resolves to the newest release. If you pinned to an exact version, swap in the new tag. A plain `git pull` doesn't work if you copied the folder out of a scratch clone rather than cloning directly into place.
@@ -113,8 +139,27 @@ Start a new session afterward, same as a fresh install — a session already in 
 
 This is separate from whether your project's own `context/` needs anything done to it. Updating the skill replaces its own files wholesale — nothing to do on your side just because a release changed how `SKILL.md` describes itself internally. A release asks something of your project when `migrations.md` has an entry that applies — not just `context/` entry-format changes, also structural conventions (like `context/index.md`'s sort order), new config defaults, and storage-location changes (like config moving into a dedicated `.keep-the-why` file) — tracked via `context-schema` in your project's `.keep-the-why`; see `setup.md` and `migrations.md`. The two are independent: a release can update the skill's own frontmatter shape (as `0.3.1` did) without touching `context-schema` at all.
 
-## Verifying it loaded
+## Trust and scope
 
-A Skill activates when something in the conversation matches its description — not automatically the moment a session starts. Start a session in a project where the skill is installed and say so directly — "initialize Keep the Why in this project" or similar — to run the one-time setup wizard. For a brand-new project, this is the only path that works: an organic activation (asking something the skill's description happens to match, e.g. "why does this workaround exist, and can you document it?") answers the question but deliberately doesn't propose or run setup on its own — see `references/setup.md`'s "Detection and the two independent wizards" for why. Once a project already has `.keep-the-why`, an organic activation works normally for everything else (continuous capture, retrospective recovery, and so on) — the gate only applies to first-time setup. If it doesn't seem to activate at all even when asked directly, double-check that `SKILL.md` sits directly inside the skill folder (not nested deeper) and that the folder name matches `name: keep-the-why` in the frontmatter exactly.
+Before letting anything run inside an agent, know what you're actually getting:
 
-This explicit nudge is only needed for the first activation in a project. Setup creates a `.keep-the-why` file at the project root (where `context/` lives, that setup is complete), checked by this skill directly at the start of every later session — `AGENTS.md` itself is left untouched; mentioning Keep the Why anywhere a human would read it (a README section, the badge) is the project's own call, not something setup writes in. Every session after the first one picks the project back up on its own; there's nothing project-specific to repeat.
+- **The skill package is instructions only.** `skills/keep-the-why/` is `SKILL.md`, `references/*.md`, `examples/*.md` — no scripts, no binaries. What the instructions can trigger is one thing: the linter, `keep-the-why-lint`, installed by its fixed name from PyPI and run after writes when you say yes in the setup wizard (the wizard's default is yes; `no` turns it off). Autostart, if you enable it, writes a session hook into the project's agent settings — a file you see and commit. The exact bounds are on [Security](security.md).
+- **No network access of its own.** The package has nothing that calls out. The one install the skill may ask for is that PyPI package; everything else is your agent's own network access, not something this skill adds.
+- **No external services.** No database, no MCP server, no account, no API key. The [dashboard](dashboard.md) is a second, separate PyPI package you install yourself if you want it; the skill never installs or starts it.
+- **Install a tagged release, not `main`.** `main` is where active development happens and isn't guaranteed release-ready at any given moment — installing without pinning tracks it directly. A `latest` tag always points to the newest release, moved automatically by CI whenever one ships. Every install method below shows how to pin to it (or to an exact version, for full reproducibility).
+- **Updating is explicit**, never automatic — see "Updating" below.
+
+None of that substitutes for actually reading `SKILL.md` yourself before installing — see "Also recommended: GitHub CLI" above for `gh skill preview`, which lets you do exactly that.
+
+## Also listed on
+
+| Name | Info |
+|---|---|
+| [ASM](https://luongnv.com/asm/#/skills/oliver-zehentleitner%2Fkeep-the-why%3A%3Askills%2Fkeep-the-why%3A%3Akeep-the-why) | Curated skill index for the `asm` CLI; installable via `asm install keep-the-why` |
+| [awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills#context-engineering) | Listed under "Context Engineering" |
+| [GitHub Copilot plugin marketplace](https://awesome-copilot.github.com/plugin/keep-the-why/) | Installable via `copilot plugin install keep-the-why@awesome-copilot` |
+| [HOL AI plugin registry](https://hol.org/registry/plugins/oliver-zehentleitner%2Fkeep-the-why) | Owner-verified listing; the registry's scanner is the one this repository runs itself, see [Security](security.md) |
+| [MCP Market](https://mcpmarket.com/tools/skills/keep-the-why) | Skill marketplace listing |
+| [skills.sh](https://skills.sh/oliver-zehentleitner/keep-the-why/keep-the-why) | Backs the `npx skills add` install method above |
+| [SkillsLLM](https://skillsllm.com/skill/keep-the-why) | Verified, passed [SkillsLLM's security scan](https://skillsllm.com/security-check/IPmNycVdbOyq) |
+

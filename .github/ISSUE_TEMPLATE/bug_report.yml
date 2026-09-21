@@ -1,0 +1,96 @@
+name: Bug report
+description: The linter, the GitHub Action, the docs, or the evals tooling does something wrong.
+labels: bug
+assignees:
+  - oliver-zehentleitner
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for anything in this repository that runs as code or is published as text: `ktw-lint`, the `keep-the-why-lint` GitHub Action, the documentation at keepthewhy.com, the evals runner in `tools/evals/`. If the agent behaved differently than the skill describes, use the *Skill behavior report* template instead.
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the existing issues and the documentation. The problem still occurs on the latest release.
+          required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - ktw-lint (local run)
+        - GitHub Action (oliver-zehentleitner/keep-the-why@lint-...)
+        - Documentation (keepthewhy.com or the Markdown in the repository)
+        - Evals tooling (tools/evals/)
+        - Repository structure / specification
+        - Other (please explain below)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: |
+        `ktw-lint --version` for the linter; the `@lint-...` ref for the Action; the skill version (`metadata.version` in `SKILL.md`) or the page URL for the docs.
+      placeholder: "ktw-lint 0.17.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - GitHub-hosted runner
+        - Other (please explain below)
+    validations:
+      required: false
+
+  - type: dropdown
+    id: python
+    attributes:
+      label: Python version
+      description: Only for the linter and the evals tooling.
+      options:
+        - Python 3.10
+        - Python 3.11
+        - Python 3.12
+        - Python 3.13
+        - Python 3.14
+    validations:
+      required: false
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command and output
+      description: |
+        The exact command or workflow step, and its full output. For the Action, the job log of the failing step. Remove anything confidential.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: input_files
+    attributes:
+      label: Input that triggers it
+      description: |
+        For linter findings you consider wrong: the `context/` entry or `.keep-the-why` line the finding points at, and the finding code (`E104`, `W003`, ...). Project and personal `.keep-the-why` settings if they matter.
+      render: markdown
+    validations:
+      required: false
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What happens, and what you expected instead
+    validations:
+      required: true

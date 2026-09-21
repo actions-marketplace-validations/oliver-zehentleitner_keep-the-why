@@ -3,7 +3,7 @@
 Runs the skill's eval cases (`tools/evals/evals.json`) against a
 real agent and grades the results. This is a development tool for this
 repository — deliberately **not** part of the installable skill package, which
-ships instructions only, no executable code.
+ships instructions only, no scripts of its own.
 
 ## How it works
 
@@ -26,8 +26,49 @@ For each case:
    non-interactive, ending the turn with a question counts as fully correct
    wherever the expected behavior involves asking the user something.
 
+Between 2 and 3, for a case that declares `checks` in `evals.json`, the
+**deterministic checks** run against the workdir itself: was a file written
+under `context/`, was `.keep-the-why` left alone, did a literal secret land
+anywhere on disk, was the skill loaded by a real tool call. A failed check
+is a failed case and the judge isn't called for it (`--judge-always`
+overrides that and stores the judge's own verdict as `judge_verdict` next to
+the final one — a judge `pass` on a case the checks failed is a judge blind
+spot, and worth reading). The check types are documented at the top of
+`ktw_evals/checks.py`; the rule for adding one to a case is that it must be
+*certain* from the expected behavior, not merely likely — a check that needs
+interpretation belongs in `expected_behavior` for the judge. 58 of the 88
+cases carry checks.
+
 Results land in `results/<timestamp>-<driver>/` (gitignored): one JSON per
-case plus `summary.json` and `summary.md`.
+case plus `summary.json` and `summary.md`. Each record and the summary name
+the instrument that produced them — the model ids the `--model` and
+`--judge-model` aliases resolved to (from the CLI's init event; `null` for a
+driver that doesn't report one) and a hash of the judge prompt — so a later
+run can tell a change in the skill from a change in what measured it.
+
+## Layout
+
+`run.py` is the command-line entry point and keeps the long-form driver
+notes in its module docstring; the code lives in the `ktw_evals/` package
+next to it, one module per responsibility:
+
+| Module | What it holds |
+|---|---|
+| `common.py` | repository paths, size caps, `sh()`, `skill_version()` |
+| `cases.py` | `evals.json`, per-case `case.json`, `matrix-config.json` loading |
+| `workdir.py` | materializing the throwaway project and fake `$HOME`; `collect_diff()` afterwards |
+| `drivers/` | one module per agent CLI (`run_agent_*` + `render_transcript_*`); the registry and per-driver tables in `__init__.py` |
+| `analysis.py` | `restraint_analysis()` and `skill_load_found()` — mechanical, judge-free reads of a transcript |
+| `checks.py` | the deterministic per-case checks declared in `evals.json` (`checks`) |
+| `judge.py` | the judge prompt and the Claude call that grades a case |
+| `results.py` | stored verdicts, the rate-limit sentinel, `summary.json` / `summary.md` |
+| `runner.py` | `run_case()`, `execute_pass()`, and the retry loop |
+| `matrix.py` | `--matrix` orchestration and its table |
+| `series.py` | the verdict over a series of full runs — every case passes 2 of 3, no run with more than one failure, no guard check violated at all; `tools/evals/series.py` is its command line |
+| `tests/` | offline tests for `checks.py`, `workdir.py` and `series.py` — `python3 -m unittest discover -s tools/evals/tests` |
+
+Adding a driver means one new module under `drivers/` plus its rows in the
+`__init__.py` tables; nothing else needs to know.
 
 ## Drivers
 
@@ -121,7 +162,7 @@ if a driver's CLI version changes noticeably.
 ## Usage
 
 ```bash
-# everything (73 cases; expect a long run and real API usage)
+# everything (88 cases; expect a long run and real API usage)
 python3 tools/evals/run.py --all
 
 # a subset
@@ -148,6 +189,74 @@ config: for `pi`, a local Ollama or OpenRouter model needs a matching entry in
 `omp`, an `OPENROUTER_API_KEY` env var (no per-model registration needed —
 any `provider/model` string is passed straight through to `--model`).
 Exit code is non-zero if any case fails or errors.
+
+A single run's pass count is a sample, not a verdict — see "How a series is
+judged" in [`docs/evals.md`](../../docs/evals.md). Three full runs are judged
+together:
+
+```bash
+python3 tools/evals/series.py results/full-r1 results/full-r2 results/full-r3
+```
+
+It prints the pass count per run, every case that did not pass all runs with
+its verdicts, and three lines: the per-case gate (every case passes at least 2
+of 3), the per-run limit (no run with more than one failed case) and the
+guards (no guard check violated in any run — the prohibitions among the
+deterministic checks, see the top of `ktw_evals/checks.py`; a check opts out
+with `"guard": false` in `evals.json`). Exit code 0 when all three hold.
+
+Next to every flipped case it prints the case's record over the released
+series before this one, from `history.json` — a flip on a case that has never
+failed reads differently from one on a case that fails now and then. A
+release measurement adds itself with `--version X.Y.Z --record`; the file is
+committed. It starts with 0.17.0 and is a reading aid, not a gate.
+
+### Permissions: the agent runs unrestricted, on your machine
+
+Every driver is invoked with its permission bypass (`--dangerously-skip-permissions`,
+`--yolo`, `--auto`, …) and inherits your full environment, API keys included.
+The fake `$HOME` isolates the skill's own files, nothing else: the agent can
+reach the rest of the filesystem and the network like any process you start.
+The fixtures deliberately contain prompt-injection payloads, because the trust
+model is what several cases test. Run the suite on a machine you would let an
+unknown script run on — a disposable VM or container — and source the API keys
+for the run rather than keeping them in your shell profile. Treat a fixture
+contributed by pull request as code: read it before running it locally.
+
+### Disk: point `TMPDIR` somewhere with room — but never inside your home
+
+Every case materializes its project *and* a fake `$HOME` under the system
+temp directory, and the fake `$HOME` starts as a copy of the driver's own
+config (`~/.claude` for the claude driver — easily 150–200 MB). On a host
+where `/tmp` is a small tmpfs, a handful of parallel cases fills it and the
+run dies at the copy step with `No space left on device`; a crashed run can
+also leave its `ktw-eval-*` directories behind. The runner honors `TMPDIR`:
+
+```bash
+TMPDIR=/var/tmp python3 tools/evals/run.py --all
+```
+
+Pick a location **outside the operator's home directory**. The fake `$HOME`
+keeps the agent away from your real `~/.keep-the-why/`, but only as long as
+the agent can't guess where your real home is — and a project path like
+`/home/you/…/tmp/ktw-eval-…/project` tells it. Seen for real: with `TMPDIR`
+under the repository, two of three runs of a case that writes the personal
+file wrote it to the operator's actual `~/.keep-the-why/` instead of the
+fake one. The runner now refuses to start when the temp directory resolves
+to somewhere under `Path.home()`.
+
+### Your own session hooks stay out of the cases
+
+The claude driver's fake `$HOME` starts as a copy of your `~/.claude`, because
+that is where the CLI's login lives. Your `settings.json` comes along — minus
+its `hooks` block, which the runner drops from the copy (`HOME_STRIP_HOOKS` in
+`ktw_evals/drivers/__init__.py`; your real file is never touched). A
+user-scoped `SessionStart` hook that loads keep-the-why in every project —
+autostart path 1 in `references/autostart.md`, the setup a developer who uses
+the skill daily is likely to have — would otherwise load the skill in exactly
+the cases that measure what happens without a hook. The hooks a case needs are
+the fixture's own, project-scoped ones. A `settings.json` that isn't valid JSON
+stops the run instead of being copied as it is.
 
 ## Matrix runs
 
@@ -204,9 +313,13 @@ code change.
     `~/.keep-the-why/<id>.md` yet for this project (the equivalent of the old
     "remove `AGENTS.local.md`" convention, from before personal config moved
     outside the project)
-  - `"commits": [{"message", "files", "author", "date"}]` — extra commits
-    after the initial one, for cases where git history is part of the
-    evidence (legacy analysis, injection in a commit message)
+  - `"commits": [{"message", "files", "author", "date" | "days_ago"}]` —
+    extra commits after the initial one, for cases where git history is part
+    of the evidence (legacy analysis, injection in a commit message).
+    `"days_ago"` dates the commit relative to the run, for a prompt that says
+    "two weeks ago" or "last month" — a fixed `"date"` there drifts with the
+    calendar until the agent asks about the discrepancy instead of the
+    case's question
   - `"disallowed_tools": [names]` — passed to `--disallowedTools` (e.g. deny
     `WebFetch`/`WebSearch` to simulate a session without web access)
 - `fixtures/<case-id>/home/` — optional, overlaid onto the fake `$HOME`
@@ -224,6 +337,18 @@ read or write the operator's own real `~/.keep-the-why/` files. The judge sees
 its contents the same way it sees new project files: `collect_diff` appends a
 snapshot of everything under the fake `$HOME`'s `.keep-the-why/` alongside the
 project's own `git status`/`git diff` output.
+
+The fake `$HOME` also fences tool installs. Since 0.14.0 the skill installs
+`keep-the-why-lint` itself when a developer's `local-lint` setting says so,
+and `pipx`, `uv tool` and `pip --user` each pick their install and bin
+directories through their own variables rather than `$HOME` alone — so every
+driver is launched with `PIPX_HOME`, `PIPX_BIN_DIR`, `UV_TOOL_DIR`,
+`UV_TOOL_BIN_DIR` and `PYTHONUSERBASE` under the fake home, and the fake
+home's `.local/bin` first on `PATH` (`common.fake_home_env`). What a session
+installs stays in its own throwaway home and is listed for the judge; the
+next session starts without it. Before this, the `auto` case's install went
+to the operator's real `~/.local` and every later session found the linter
+already present.
 
 Six cases intentionally have no fixture directory and run on `_base` as-is;
 their prompts carry the whole scenario.
@@ -250,11 +375,48 @@ transcript turns out to actually be a limit message (e.g. from a run
 predating this check) is treated as unresolved too, not trusted.
 
 For a run that should survive account limits unattended, add
-`--retry-until-complete` (sleeps `--retry-interval` seconds, default 600,
-and retries only the unresolved cases, up to `--max-wait-hours`, default
-10) instead of babysitting it.
+`--retry-until-complete` (retries only the unresolved cases, up to
+`--max-wait-hours`, default 10) instead of babysitting it. The wait between
+retry passes depends on *why* cases are unresolved: while any case is
+`rate_limited` it sleeps `--retry-interval` seconds (default 600 — quota
+windows reset on an hours scale); when every unresolved case is a plain
+`error` — a safety-classifier refusal, a driver crash, a timeout — it sleeps
+only `--error-retry-interval` seconds (default 30), since those are retriable
+at once.
 
 ## Interpreting results
+
+`summary.md` reports one pass count and, under it, four numbers that a pass
+count runs together:
+
+- **Skill loaded** — a tool call in the transcript loaded the skill (the
+  `Skill` tool, or a read of `SKILL.md`). Mechanical; prose claiming to have
+  loaded it doesn't count. This is the activation number. Each record also
+  carries `skill_loaded_at`, the ordinal of that tool call: 1 means the very
+  first thing the agent did, which is what a project's "before anything
+  else" instruction asks for; a control run with no instruction at all once
+  read `SKILL.md` as its seventh call while exploring, which is activation
+  of a different kind.
+- **Completed** — the run ended with a real verdict and a final response
+  (no driver error, no rate limit, no session cut off mid-tool-call).
+- **Deterministic checks** — of the cases that declare `checks`, how many
+  passed all of them.
+- **Judge pass** — of the cases the judge graded, how many it passed.
+
+A drop in the first number is an activation problem (the 2026-08-25 row in
+`docs/evals.md`); a drop in the second is the harness or the account; only
+the last two say anything about the skill's behavior.
+
+Below that, one row per case — passes included — with the skill-load
+ordinal, checks passed/declared, the restraint code, and a last column that
+answers the question a score raises: for a fail, the failed checks and the
+judge's violations; for a 9, the judge's `deductions` (one entry per point
+withheld, each naming the requirement and the evidence); for a 10, nothing
+withheld. The judge also returns `expectations`: the expected behavior
+broken into its individual requirements, each marked met or not with the
+transcript/diff detail that decides it. That list lives in the case JSON —
+it is how "asked first, then deleted anyway" reads as two facts instead of
+one score.
 
 The judge is an LLM: treat a `fail` as a lead to read, not a verdict to
 trust blindly — open the case's JSON in `results/<timestamp>/` and read the
@@ -263,12 +425,18 @@ normal model variance; re-run a surprising case before concluding anything.
 
 ## Ongoing status
 
-What's currently being improved, what's working, what isn't yet, and how to help (including running this suite against an agent other than Claude Code): [issue #131](https://github.com/oliver-zehentleitner/keep-the-why/issues/131), kept current as a living status page.
+Current numbers, per-case results and the stated caveats: `docs/evals.md`,
+updated with every release (release checklist, "Measure the release").
+What changed and why: `CHANGELOG.md`. Open problems and ideas, one issue
+each: the [issue tracker](https://github.com/oliver-zehentleitner/keep-the-why/issues)
+— including the missing Gemini CLI driver ([#262](https://github.com/oliver-zehentleitner/keep-the-why/issues/262)),
+the most useful addition to this runner right now.
 
 ## Known limitations
 
-- One run per case per driver — no flakiness statistics yet. Tracked as an
-  idea in the issue tracker.
+- No repeat mode: the runner does one run per case; the three-runs-per-case
+  numbers in `docs/evals.md` come from three separate full runs. Cases that
+  flip between runs mostly sit on the ask-versus-write boundary.
 - Non-interactive: multi-turn flows (a full wizard dialogue, a confirmation
   answered with "yes") can only be tested up to the agent's first stopping
   point.

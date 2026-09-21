@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and ideas — Discussions
+    url: https://github.com/oliver-zehentleitner/keep-the-why/discussions
+    about: Not sure it's a bug, or want to talk a design question through first? Start a discussion.
+  - name: Documentation — keepthewhy.com
+    url: https://keepthewhy.com/
+    about: Installation, the specification, linting, evals, the agent and model matrix.
+  - name: Community chat — Telegram
+    url: https://t.me/unicorndevs
+    about: Chat with the maintainer and other users.

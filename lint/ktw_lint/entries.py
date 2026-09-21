@@ -16,7 +16,9 @@ from dataclasses import dataclass, field
 KNOWN_FIELDS = ("Type", "Status", "Evidence", "Source", "Verification", "Revisit when")
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*$")
-_FIELD_RE = re.compile(r"^\*\*(Type|Status|Evidence|Source|Verification|Revisit when):\*\*\s*(.*?)\s*$")
+_FIELD_RE = re.compile(
+    r"^\*\*(Type|Status|Evidence|Source|Verification|Revisit when):\*\*\s*(.*?)\s*$"
+)
 _FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
 
@@ -68,11 +70,32 @@ def parse_topic_text(text: str):
             continue
         fld = _FIELD_RE.match(raw)
         if fld:
-            current.fields.append(FieldLine(name=fld.group(1), value=fld.group(2), line=lineno))
+            current.fields.append(
+                FieldLine(name=fld.group(1), value=fld.group(2), line=lineno)
+            )
     return entries
 
 
 _INDEX_LINK_RE = re.compile(r"^\s*-\s*\[([^\]]+)\]\(([^)]+)\)")
+
+
+_INDEX_HEADING_RE = re.compile(r"^##\s+(.*?)\s*$")
+
+
+def parse_index_headings(text: str):
+    """(line, heading_text) for every level-2 heading in index.md, in order."""
+    rows = []
+    in_fence = False
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        if _FENCE_RE.match(raw):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        match = _INDEX_HEADING_RE.match(raw)
+        if match:
+            rows.append((lineno, match.group(1)))
+    return rows
 
 
 def parse_index_text(text: str):

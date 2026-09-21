@@ -44,7 +44,22 @@ Body text.
 """
 
 
-class LintProject(unittest.TestCase):
+INDEX_HEADINGS = list("0123456789") + [chr(c) for c in range(ord("A"), ord("Z") + 1)]
+
+
+def skeleton_index(entries_by_letter):
+    """An index.md in the 0.13.0 letter skeleton, entries given per heading."""
+    out = ["# Context index", ""]
+    for h in INDEX_HEADINGS:
+        out += [f"## {h}", ""]
+        if h in entries_by_letter:
+            out += entries_by_letter[h] + [""]
+    return "\n".join(out) + "\n"
+
+
+class _ProjectFixture(unittest.TestCase):
+    """Temp-dir project builder shared by the test classes below; no tests here."""
+
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = self._tmp.name
@@ -75,30 +90,39 @@ class LintProject(unittest.TestCase):
     def base_project(self, config=GOOD_CONFIG, topic=GOOD_ENTRY):
         self.write(".keep-the-why", config)
         self.write("context/sync.md", topic)
-        self.write("context/index.md", "# Context index\n\n- [sync.md](sync.md) — sync design\n")
+        self.write(
+            "context/index.md",
+            skeleton_index({"S": ["- [sync.md](sync.md) — sync design"]}),
+        )
         self.write("context/README.md", "# Project context\n")
         self.write("context/AGENTS.md", "Invoke the keep-the-why skill first.\n")
         self.write("context/CLAUDE.md", "@AGENTS.md\n")
 
     def run_lint(self):
         linter = Linter(self.root)
-        return linter.run(_load_config(self.root)), linter
+        return linter.run(_load_config(self.root, linter)), linter
 
     def codes(self, findings):
         return sorted(f.code for f in findings)
 
+
+class LintProject(_ProjectFixture):
     # -- happy path ------------------------------------------------------
 
     def test_clean_project(self):
         self.base_project()
         findings, linter = self.run_lint()
-        self.assertEqual(self.codes(findings), [], msg=[f.format_text() for f in findings])
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
         self.assertEqual(linter.schema, (0, 10, 1))
 
     def test_exit_codes(self):
         self.base_project()
         self.assertEqual(self.cli([self.root]), 0)
-        self.write("context/sync.md", GOOD_ENTRY.replace("**Evidence:** confirmed\n", ""))
+        self.write(
+            "context/sync.md", GOOD_ENTRY.replace("**Evidence:** confirmed\n", "")
+        )
         self.assertEqual(self.cli([self.root]), 1)
 
     def test_strict_turns_warnings_into_failure(self):
@@ -118,7 +142,9 @@ class LintProject(unittest.TestCase):
         legacy = GOOD_CONFIG.replace("- id: acme---widget-service\n", "")
         self.write("AGENTS.md", "# AGENTS\n\n" + legacy)
         findings, _ = self.run_lint()
-        self.assertEqual(self.codes(findings), [], msg=[f.format_text() for f in findings])
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
 
     def test_missing_required_field(self):
         self.base_project(config=GOOD_CONFIG.replace("- init: complete\n", ""))
@@ -147,7 +173,7 @@ class LintProject(unittest.TestCase):
     def test_duplicate_and_unknown_fields(self):
         config = GOOD_CONFIG.replace(
             "<!-- /keep-the-why:config -->",
-            "- init: declined\n- frobnicate: yes\n<!-- /keep-the-why:config -->",
+            "- init: complete\n- frobnicate: yes\n<!-- /keep-the-why:config -->",
         )
         self.base_project(config=config)
         findings, _ = self.run_lint()
@@ -156,7 +182,9 @@ class LintProject(unittest.TestCase):
 
     def test_missing_schema_warns_and_gates_everything_off(self):
         config = GOOD_CONFIG.replace("- context-schema: 0.10.1\n", "")
-        entry = GOOD_ENTRY.replace("**Status:** active\n", "").replace("**Evidence:** confirmed\n", "")
+        entry = GOOD_ENTRY.replace("**Status:** active\n", "").replace(
+            "**Evidence:** confirmed\n", ""
+        )
         self.base_project(config=config, topic=entry)
         findings, linter = self.run_lint()
         codes = self.codes(findings)
@@ -164,6 +192,89 @@ class LintProject(unittest.TestCase):
         self.assertEqual(linter.schema, (0, 2, 0))
         self.assertNotIn("E101", codes)  # pre-0.3.0: Status/Evidence not required
         self.assertIn("W104", codes)  # but a Type line on 0.2.0 gets flagged
+
+    def test_pending_confirmation_gated_by_schema(self):
+        entry = GOOD_ENTRY.replace(
+            "**Status:** active", "**Status:** pending-confirmation"
+        )
+        # GOOD_CONFIG's schema (0.10.1) predates the 0.13.0 gate.
+        self.base_project(topic=entry)
+        codes = self.codes(self.run_lint()[0])
+        self.assertNotIn("E103", codes)  # a recognized word, not "not one of: ..."
+        self.assertIn("E113", codes)
+        self.base_project(config=GOOD_CONFIG.replace("0.10.1", "0.13.0"), topic=entry)
+        codes = self.codes(self.run_lint()[0])
+        self.assertNotIn("E103", codes)
+        self.assertNotIn("E113", codes)
+
+    def test_pending_confirmation_check_default_field(self):
+        config = GOOD_CONFIG + (
+            "\n<!-- keep-the-why:personal-defaults -->\n"
+            "- pending-confirmation-check: on-start\n"
+            "<!-- /keep-the-why:personal-defaults -->\n"
+        )
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
+        self.base_project(config=config.replace("on-start", "sometimes"))
+        self.assertIn("E003", self.codes(self.run_lint()[0]))
+
+    def test_index_skeleton_gated_by_schema(self):
+        # the flat index is fine below 0.13.0 and an error from 0.13.0 on
+        flat = "# Context index\n\n- [sync.md](sync.md) — sync design\n"
+        self.base_project()
+        self.write("context/index.md", flat)
+        self.assertNotIn("E205", self.codes(self.run_lint()[0]))
+        self.base_project(config=GOOD_CONFIG.replace("0.10.1", "0.13.0"))
+        self.write("context/index.md", flat)
+        codes = self.codes(self.run_lint()[0])
+        self.assertIn("E205", codes)
+        self.assertNotIn("E206", codes)  # placement is not judged without the skeleton
+
+    def test_index_skeleton_complete_and_placement(self):
+        self.base_project(config=GOOD_CONFIG.replace("0.10.1", "0.13.0"))
+        index = skeleton_index
+
+        self.write(
+            "context/index.md", index({"S": ["- [sync.md](sync.md) — sync design"]})
+        )
+        findings, _ = self.run_lint()
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
+        # wrong letter
+        self.write(
+            "context/index.md", index({"A": ["- [sync.md](sync.md) — sync design"]})
+        )
+        self.assertIn("E206", self.codes(self.run_lint()[0]))
+        # a heading missing
+        self.write(
+            "context/index.md",
+            index({"S": ["- [sync.md](sync.md) — sync design"]}).replace(
+                "## Q\n\n", ""
+            ),
+        )
+        findings, _ = self.run_lint()
+        e205 = [f for f in findings if f.code == "E205"]
+        self.assertEqual(len(e205), 1)
+        self.assertIn("missing: Q", e205[0].message)
+        # a digit-initial name goes under its digit
+        self.write("context/2fa.md", GOOD_ENTRY)
+        self.write(
+            "context/index.md",
+            index(
+                {
+                    "2": ["- [2fa.md](2fa.md) — second factor"],
+                    "S": ["- [sync.md](sync.md) — sync design"],
+                }
+            ),
+        )
+        findings, _ = self.run_lint()
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
 
     def test_schema_newer_than_linter_warns(self):
         self.base_project(config=GOOD_CONFIG.replace("0.10.1", "9.9.9"))
@@ -174,7 +285,8 @@ class LintProject(unittest.TestCase):
 
     def test_pinned_pair(self):
         config = GOOD_CONFIG.replace(
-            "<!-- /keep-the-why:config -->", "- pinned-version: 0.9.5\n<!-- /keep-the-why:config -->"
+            "<!-- /keep-the-why:config -->",
+            "- pinned-version: 0.9.5\n<!-- /keep-the-why:config -->",
         )
         self.base_project(config=config)
         findings, _ = self.run_lint()
@@ -188,7 +300,9 @@ class LintProject(unittest.TestCase):
         self.base_project(config=config)
         findings, _ = self.run_lint()
         self.assertIn("E006", self.codes(findings))
-        self.write(".claude/skills/keep-the-why/SKILL.md", "---\nname: keep-the-why\n---\n")
+        self.write(
+            ".claude/skills/keep-the-why/SKILL.md", "---\nname: keep-the-why\n---\n"
+        )
         findings, _ = self.run_lint()
         self.assertNotIn("E006", self.codes(findings))
 
@@ -216,7 +330,9 @@ class LintProject(unittest.TestCase):
     # -- entries ---------------------------------------------------------
 
     def test_missing_status_and_evidence(self):
-        entry = GOOD_ENTRY.replace("**Status:** active\n", "").replace("**Evidence:** confirmed\n", "")
+        entry = GOOD_ENTRY.replace("**Status:** active\n", "").replace(
+            "**Evidence:** confirmed\n", ""
+        )
         self.base_project(topic=entry)
         findings, _ = self.run_lint()
         codes = self.codes(findings)
@@ -239,7 +355,10 @@ class LintProject(unittest.TestCase):
         entry = GOOD_ENTRY + "\n**Verification:** contradicted\n"
         self.base_project(topic=entry)
         self.assertIn("E111", self.codes(self.run_lint()[0]))
-        entry = GOOD_ENTRY + "\n**Verification:** contradicted — code caps at 5, interview said 3\n"
+        entry = (
+            GOOD_ENTRY
+            + "\n**Verification:** contradicted — code caps at 5, interview said 3\n"
+        )
         self.base_project(topic=entry)
         self.assertNotIn("E111", self.codes(self.run_lint()[0]))
 
@@ -247,7 +366,9 @@ class LintProject(unittest.TestCase):
         entry = GOOD_ENTRY.replace("**Type:** decision", "**Type:** undefined")
         self.base_project(topic=entry)
         self.assertIn("E107", self.codes(self.run_lint()[0]))
-        entry = GOOD_ENTRY.replace("**Type:** decision", "**Type:** undefined — names a convention")
+        entry = GOOD_ENTRY.replace(
+            "**Type:** decision", "**Type:** undefined — names a convention"
+        )
         self.base_project(topic=entry)
         self.assertNotIn("E107", self.codes(self.run_lint()[0]))
         entry = GOOD_ENTRY.replace(
@@ -257,7 +378,9 @@ class LintProject(unittest.TestCase):
         self.assertIn("E108", self.codes(self.run_lint()[0]))
 
     def test_multi_type_gated_by_schema(self):
-        entry = GOOD_ENTRY.replace("**Type:** decision", "**Type:** workaround\n**Type:** incident")
+        entry = GOOD_ENTRY.replace(
+            "**Type:** decision", "**Type:** workaround\n**Type:** incident"
+        )
         self.base_project(topic=entry)
         self.assertNotIn("E110", self.codes(self.run_lint()[0]))
         self.base_project(config=GOOD_CONFIG.replace("0.10.1", "0.8.0"), topic=entry)
@@ -265,7 +388,9 @@ class LintProject(unittest.TestCase):
         self.assertIn("E110", codes)
 
     def test_duplicate_type_value(self):
-        entry = GOOD_ENTRY.replace("**Type:** decision", "**Type:** incident\n**Type:** incident")
+        entry = GOOD_ENTRY.replace(
+            "**Type:** decision", "**Type:** incident\n**Type:** incident"
+        )
         self.base_project(topic=entry)
         self.assertIn("E109", self.codes(self.run_lint()[0]))
 
@@ -277,7 +402,10 @@ class LintProject(unittest.TestCase):
         self.assertEqual([f.code for f in findings if f.severity == "error"], [])
 
     def test_type_after_status_warns(self):
-        entry = GOOD_ENTRY.replace("**Type:** decision\n**Status:** active", "**Status:** active\n**Type:** decision")
+        entry = GOOD_ENTRY.replace(
+            "**Type:** decision\n**Status:** active",
+            "**Status:** active\n**Type:** decision",
+        )
         self.base_project(topic=entry)
         self.assertIn("W103", self.codes(self.run_lint()[0]))
 
@@ -303,7 +431,9 @@ class LintProject(unittest.TestCase):
 
     def test_index_broken_link_and_unlisted_topic(self):
         self.base_project()
-        self.write("context/index.md", "# Context index\n\n- [gone.md](gone.md) — nope\n")
+        self.write(
+            "context/index.md", "# Context index\n\n- [gone.md](gone.md) — nope\n"
+        )
         codes = self.codes(self.run_lint()[0])
         self.assertIn("E202", codes)
         self.assertIn("E203", codes)
@@ -354,3 +484,508 @@ class LintProject(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PathConfinement(_ProjectFixture):
+    """Configured paths never lead the linter outside the project root (E009)."""
+
+    def setUp(self):
+        super().setUp()
+        self._outside_tmp = tempfile.TemporaryDirectory()
+        self.outside = self._outside_tmp.name
+        with open(os.path.join(self.outside, "leak.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Leak\n\n## Heading only\n\ntext\n")
+
+    def tearDown(self):
+        self._outside_tmp.cleanup()
+        super().tearDown()
+
+    def config_with_context(self, value):
+        return GOOD_CONFIG.replace("- context: `context/`", f"- context: `{value}`")
+
+    def assert_rejected(self, findings):
+        self.assertIn("E009", self.codes(findings))
+        # nothing from the outside directory was read: its heading-only
+        # section would otherwise surface as W102, its missing index as E201
+        for code in ("W102", "E201", "W201"):
+            self.assertNotIn(code, self.codes(findings))
+
+    def test_dotdot_context_is_rejected(self):
+        self.base_project(config=self.config_with_context("../"))
+        findings, _ = self.run_lint()
+        self.assert_rejected(findings)
+
+    def test_absolute_context_is_rejected(self):
+        self.base_project(config=self.config_with_context(self.outside))
+        findings, _ = self.run_lint()
+        self.assert_rejected(findings)
+
+    def test_windows_style_absolute_context_is_rejected(self):
+        # os.path.isabs only recognizes the drive form on Windows; on POSIX
+        # `C:\...` is a relative name that simply doesn't exist (E007), and
+        # either way nothing outside the tree gets read.
+        self.base_project(config=self.config_with_context(r"C:\Users\x\context"))
+        findings, _ = self.run_lint()
+        self.assertTrue({"E007", "E009"} & set(self.codes(findings)))
+        self.assertNotIn("W102", self.codes(findings))
+
+    def test_symlinked_context_dir_leaving_the_tree_is_rejected(self):
+        self.base_project(config=self.config_with_context("linked/"))
+        os.symlink(self.outside, os.path.join(self.root, "linked"))
+        findings, _ = self.run_lint()
+        self.assert_rejected(findings)
+
+    def test_symlinked_file_inside_context_leaving_the_tree_is_skipped(self):
+        self.base_project()
+        os.symlink(
+            os.path.join(self.outside, "leak.md"),
+            os.path.join(self.root, "context", "leak.md"),
+        )
+        findings, _ = self.run_lint()
+        codes = self.codes(findings)
+        self.assertIn("E009", codes)
+        self.assertNotIn("W102", codes)  # the linked file's content was not read
+        # and the index check didn't treat the skipped file as a real topic
+        self.assertNotIn("E203", codes)
+
+    def test_pinned_path_outside_the_tree_is_rejected(self):
+        config = GOOD_CONFIG.replace(
+            "- source-reference: never\n",
+            "- source-reference: never\n"
+            "- pinned-version: 0.10.1\n"
+            f"- pinned-path: {self.outside}\n",
+        )
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        self.assertIn("E009", self.codes(findings))
+        self.assertNotIn("E006", self.codes(findings))
+
+    def test_nested_context_dir_is_fine(self):
+        self.base_project(config=self.config_with_context("docs/why/"))
+        os.makedirs(os.path.join(self.root, "docs"), exist_ok=True)
+        os.rename(
+            os.path.join(self.root, "context"), os.path.join(self.root, "docs", "why")
+        )
+        findings, _ = self.run_lint()
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
+
+    def test_symlinked_project_root_is_fine(self):
+        self.base_project()
+        link = os.path.join(self.outside, "root-link")
+        os.symlink(self.root, link)
+        linter = Linter(link)
+        findings = linter.run(_load_config(link, linter))
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
+
+
+class ConfigFileIntegrity(_ProjectFixture):
+    """The config file is data from whoever opened the pull request: an id
+    that names a file outside ~/.keep-the-why/, a block that never closes
+    or opens twice, a control character in a path — each is a finding,
+    never a traceback and never a guess."""
+
+    def config_with_id(self, value):
+        return GOOD_CONFIG.replace("- id: acme---widget-service", f"- id: {value}")
+
+    # -- E010: id is a file name --------------------------------------------
+
+    def test_documented_id_forms_pass(self):
+        for value in (
+            "acme---widget-service",
+            "oliver-zehentleitner---keep-the-why",
+            "123e4567-e89b-12d3-a456-426614174000---My.Project_v2",
+            "hand-chosen",  # no '---' required; the alphabet is the rule
+        ):
+            with self.subTest(id=value):
+                self.base_project(config=self.config_with_id(value))
+                findings, _ = self.run_lint()
+                self.assertNotIn("E010", self.codes(findings))
+                self.assertNotIn("E003", self.codes(findings))
+
+    def test_id_that_leaves_its_directory_is_rejected(self):
+        for value in (
+            "../AGENTS",
+            "../.claude/CLAUDE",
+            "..\\..\\foo",
+            "/foo",
+            "C:\\foo",
+            "foo/bar",
+            "..",
+            ".",
+            "foo\x00bar",
+            "foo\x01bar",
+            "my cool project",  # the pre-0.13.0 rule, now the same code
+        ):
+            with self.subTest(id=value):
+                self.base_project(config=self.config_with_id(value))
+                findings, _ = self.run_lint()
+                codes = self.codes(findings)
+                self.assertIn("E010", codes, msg=[f.format_text() for f in findings])
+                self.assertNotIn("E003", codes)
+
+    def test_empty_id_is_an_invalid_value_not_an_unsafe_one(self):
+        self.base_project(config=self.config_with_id(""))
+        findings, _ = self.run_lint()
+        self.assertIn("E003", self.codes(findings))
+        self.assertNotIn("E010", self.codes(findings))
+
+    def test_id_is_not_checked_below_schema_0_10_0(self):
+        config = self.config_with_id("../AGENTS").replace("0.10.1", "0.9.0")
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        self.assertNotIn("E010", self.codes(findings))
+
+    # -- E011/E012: block delimiters ------------------------------------------
+
+    def test_unterminated_config_block(self):
+        config = GOOD_CONFIG.replace("<!-- /keep-the-why:config -->\n", "")
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        e011 = [f for f in findings if f.code == "E011"]
+        self.assertEqual(len(e011), 1)
+        self.assertEqual(e011[0].line, 3)  # points at the start marker
+        # the fields before EOF were still read: nothing else is missing
+        self.assertNotIn("E002", self.codes(findings))
+
+    def test_unterminated_personal_defaults_block(self):
+        config = GOOD_CONFIG + (
+            "\n<!-- keep-the-why:personal-defaults -->\n" "- capture-mode: proactive\n"
+        )
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        self.assertIn("E011", self.codes(findings))
+
+    def test_second_start_marker_is_reported_and_the_first_block_is_read(self):
+        config = (
+            "<!-- keep-the-why:config -->\n"
+            "- id: first---one\n"
+            "- context: `context/`\n"
+            "- init: complete\n"
+            "- context-schema: 0.10.1\n"
+            "- capture-confirmation: confirm-when-unsure\n"
+            "- source-reference: never\n"
+            "<!-- /keep-the-why:config -->\n"
+            "\n"
+            "<!-- keep-the-why:config -->\n"
+            "- id: second---one\n"
+            "- context: `elsewhere/`\n"
+            "<!-- /keep-the-why:config -->\n"
+        )
+        self.base_project(config=config)
+        findings, linter = self.run_lint()
+        e012 = [f for f in findings if f.code == "E012"]
+        self.assertEqual([f.line for f in e012], [10])
+        self.assertEqual(linter.context_dir, "context")  # first block wins
+        self.assertNotIn("E007", self.codes(findings))  # `elsewhere/` never looked up
+
+    def test_start_marker_repeated_inside_the_block(self):
+        config = GOOD_CONFIG.replace(
+            "- init: complete\n",
+            "<!-- keep-the-why:config -->\n- init: complete\n",
+        )
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        codes = self.codes(findings)
+        self.assertIn("E012", codes)
+        self.assertNotIn("E011", codes)  # the one end marker still closes it
+        self.assertNotIn("E002", codes)  # fields after the repeat still count
+
+    # -- control characters in path fields ------------------------------------
+
+    def test_nul_in_context_is_a_finding_not_a_traceback(self):
+        self.base_project(
+            config=GOOD_CONFIG.replace(
+                "- context: `context/`", "- context: `foo\x00bar`"
+            )
+        )
+        findings, linter = self.run_lint()
+        self.assertIn("E009", self.codes(findings))
+        self.assertTrue(linter.context_rejected)
+
+    def test_control_character_in_pinned_path_is_rejected(self):
+        config = GOOD_CONFIG.replace(
+            "- source-reference: never\n",
+            "- source-reference: never\n"
+            "- pinned-version: 0.10.1\n"
+            "- pinned-path: .claude/skills\x1b[0m/SKILL.md\n",
+        )
+        self.base_project(config=config)
+        findings, _ = self.run_lint()
+        self.assertIn("E009", self.codes(findings))
+        self.assertNotIn("E006", self.codes(findings))
+
+    def test_cli_survives_a_nul_in_the_config(self):
+        self.base_project(
+            config=GOOD_CONFIG.replace(
+                "- context: `context/`", "- context: `foo\x00bar`"
+            )
+        )
+        self.assertEqual(self.cli([self.root]), 1)
+
+
+class UntrustedInputRobustness(_ProjectFixture):
+    """Whatever the config file or a knowledge file contains, the linter
+    reports and exits — it never reads outside the tree, never raises, and
+    never passes raw control characters through to the terminal or to a
+    GitHub annotation."""
+
+    def setUp(self):
+        super().setUp()
+        self._outside_tmp = tempfile.TemporaryDirectory()
+        self.outside = self._outside_tmp.name
+
+    def tearDown(self):
+        self._outside_tmp.cleanup()
+        super().tearDown()
+
+    def test_config_file_symlinked_outside_the_tree_is_not_read(self):
+        self.base_project()
+        os.remove(os.path.join(self.root, ".keep-the-why"))
+        outside = os.path.join(self.outside, "planted")
+        with open(outside, "w", encoding="utf-8") as fh:
+            fh.write(
+                GOOD_CONFIG.replace(
+                    "- init: complete", "- init: complete\n- planted: hunter2"
+                )
+            )
+        os.symlink(outside, os.path.join(self.root, ".keep-the-why"))
+        findings, _ = self.run_lint()
+        codes = self.codes(findings)
+        self.assertIn("E009", codes)
+        self.assertNotIn("E001", codes)  # not "no config found" on top
+        self.assertNotIn("E005", codes)  # the planted field was never parsed
+        self.assertFalse(any("hunter2" in f.message for f in findings))
+
+    def test_legacy_agents_md_symlinked_outside_is_not_read(self):
+        outside = os.path.join(self.outside, "AGENTS.md")
+        with open(outside, "w", encoding="utf-8") as fh:
+            fh.write(GOOD_CONFIG)
+        os.symlink(outside, os.path.join(self.root, "AGENTS.md"))
+        findings, _ = self.run_lint()
+        self.assertIn("E009", self.codes(findings))
+        self.assertNotIn("E001", self.codes(findings))
+
+    def test_invalid_utf8_in_a_topic_file_is_a_finding(self):
+        self.base_project()
+        with open(os.path.join(self.root, "context", "sync.md"), "ab") as fh:
+            fh.write(b"\n\xff\xfe not text\n")
+        findings, _ = self.run_lint()
+        e302 = [f for f in findings if f.code == "E302"]
+        self.assertEqual(len(e302), 1)
+        self.assertEqual(e302[0].path, "context/sync.md")
+        self.assertEqual(e302[0].line, 17)
+        # the decodable part was still linted normally
+        self.assertNotIn("E101", self.codes(findings))
+
+    def test_invalid_utf8_in_the_config_is_a_finding(self):
+        self.base_project()
+        with open(os.path.join(self.root, ".keep-the-why"), "ab") as fh:
+            fh.write(b"\xff")
+        findings, _ = self.run_lint()
+        self.assertIn("E302", self.codes(findings))
+        self.assertNotIn(
+            "E001", self.codes(findings)
+        )  # the block before it still parsed
+        self.assertEqual(self.cli([self.root]), 1)
+
+    def test_control_characters_are_escaped_in_the_output(self):
+        self.base_project(
+            config=GOOD_CONFIG.replace(
+                "- init: complete", "- init: \x1b[31mEVIL\x1b[0m"
+            )
+        )
+        findings, _ = self.run_lint()
+        e003 = [f for f in findings if f.code == "E003"][0]
+        for rendered in (e003.format_text(), e003.format_github()):
+            self.assertNotIn("\x1b", rendered)
+            self.assertIn("\\x1bEVIL", rendered.replace("[31m", "").replace("[0m", ""))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main([self.root])
+        self.assertNotIn("\x1b", out.getvalue())
+
+
+GOOD_PERSONAL = """\
+<!-- keep-the-why:personal -->
+- capture-mode: proactive
+- confirmation-flow: sequential
+- update-check: every 14 days — last: 2026-07-21
+- consistency-check: every 30 days — last: 2026-07-21
+- pending-confirmation-check: on-start
+- local-lint: ask
+- session: attended
+- migration-prompt: 0.12.0 declined
+- migration-prompt: 0.13.0 declined
+- source: project defaults (confirmed 2026-07-21)
+<!-- /keep-the-why:personal -->
+"""
+
+GOOD_GLOBAL = """\
+<!-- keep-the-why:global -->
+- personal-defaults-policy: always-ask
+- session: unattended
+<!-- /keep-the-why:global -->
+"""
+
+
+class LintSetup(_ProjectFixture):
+    """--setup: the two files under ~/.keep-the-why/, read only on request."""
+
+    def setUp(self):
+        super().setUp()
+        self._home = tempfile.TemporaryDirectory()
+        self._home_env = mock.patch.dict(
+            os.environ, {"HOME": self._home.name, "USERPROFILE": self._home.name}
+        )
+        self._home_env.start()
+        self.base_project()
+
+    def tearDown(self):
+        self._home_env.stop()
+        self._home.cleanup()
+        super().tearDown()
+
+    def write_home(self, name, content):
+        path = os.path.join(self._home.name, ".keep-the-why", name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(content)
+
+    def run_setup(self):
+        linter = Linter(self.root)
+        return linter.run(_load_config(self.root, linter), setup=True), linter
+
+    def home_findings(self, findings):
+        return [f for f in findings if f.path.startswith("~/")]
+
+    def test_clean_setup(self):
+        self.write_home("acme---widget-service.md", GOOD_PERSONAL)
+        self.write_home("config", GOOD_GLOBAL)
+        findings, linter = self.run_setup()
+        self.assertEqual(
+            self.codes(findings), [], msg=[f.format_text() for f in findings]
+        )
+        self.assertTrue(linter.setup_checked)
+
+    def test_default_run_never_reads_home(self):
+        self.write_home(
+            "acme---widget-service.md", "<!-- keep-the-why:personal -->\n- bogus: x\n"
+        )
+        self.write_home("config", "​")
+        findings, linter = self.run_lint()
+        self.assertEqual(self.codes(findings), [])
+        self.assertFalse(linter.setup_checked)
+        self.assertEqual(self.cli([self.root]), 0)
+
+    def test_missing_personal_file_is_a_warning(self):
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["W004"])
+        self.assertEqual(findings[0].path, "~/.keep-the-why/acme---widget-service.md")
+        self.assertEqual(self.cli([self.root, "--setup"]), 0)
+        self.assertEqual(self.cli([self.root, "--setup", "--strict"]), 1)
+
+    def test_missing_global_config_is_silent(self):
+        self.write_home("acme---widget-service.md", GOOD_PERSONAL)
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), [])
+
+    def test_unusable_id_skips_personal_file(self):
+        self.write(
+            ".keep-the-why", GOOD_CONFIG.replace("acme---widget-service", "../AGENTS")
+        )
+        findings, _ = self.run_setup()
+        codes = self.codes(findings)
+        self.assertIn("E010", codes)
+        self.assertIn("W004", codes)
+        self.assertEqual(
+            [f.path for f in findings if f.code == "W004"], [".keep-the-why"]
+        )
+
+    def test_personal_file_without_block(self):
+        self.write_home("acme---widget-service.md", "# notes\n")
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["E013"])
+
+    def test_personal_values(self):
+        personal = (
+            "<!-- keep-the-why:personal -->\n"
+            "- capture-mode: sometimes\n"
+            "- confirmation-flow: batch\n"
+            "- update-check: every 14 days — last: 2026-07-21 — on-failure: retry-quietly\n"
+            "- consistency-check: monthly\n"
+            "- local-lint: always\n"
+            "- session: maybe\n"
+            "- migration-prompt: 0.12 declined\n"
+            "- source: my own\n"
+            "- capture-mode: proactive\n"
+            "- last: 2026-07-21\n"
+            "<!-- /keep-the-why:personal -->\n"
+        )
+        self.write_home("acme---widget-service.md", personal)
+        findings, _ = self.run_setup()
+        by_code = {}
+        for f in findings:
+            by_code.setdefault(f.code, []).append(f.message)
+        self.assertEqual(
+            len(by_code.get("E003", [])), 4
+        )  # capture-mode, local-lint, session, migration-prompt
+        self.assertEqual(len(by_code.get("W002", [])), 2)  # consistency-check, source
+        self.assertEqual(len(by_code.get("E004", [])), 1)  # capture-mode twice
+        self.assertEqual(len(by_code.get("E005", [])), 1)  # last
+        self.assertTrue(all(f.path.startswith("~/.keep-the-why/") for f in findings))
+
+    def test_personal_block_delimiters(self):
+        self.write_home(
+            "acme---widget-service.md",
+            "<!-- keep-the-why:personal -->\n- capture-mode: proactive\n"
+            "<!-- keep-the-why:personal -->\n",
+        )
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["E011", "E012"])
+
+    def test_global_values(self):
+        self.write_home("acme---widget-service.md", GOOD_PERSONAL)
+        self.write_home(
+            "config",
+            "<!-- keep-the-why:global -->\n- personal-defaults-policy: sometimes\n"
+            "- session: unattended\n- capture-mode: proactive\n<!-- /keep-the-why:global -->\n",
+        )
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["E003", "E005"])
+        self.assertTrue(all(f.path == "~/.keep-the-why/config" for f in findings))
+
+    def test_hidden_content_in_home_files(self):
+        self.write_home(
+            "acme---widget-service.md", GOOD_PERSONAL.replace("proactive", "pro​active")
+        )
+        self.write_home("config", GOOD_GLOBAL)
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["E003", "E301"])
+
+    def test_invalid_utf8_personal_file(self):
+        path = os.path.join(
+            self._home.name, ".keep-the-why", "acme---widget-service.md"
+        )
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
+            fh.write(
+                b"<!-- keep-the-why:personal -->\n- capture-mode: proactive\n\xff\n<!-- /keep-the-why:personal -->\n"
+            )
+        findings, _ = self.run_setup()
+        self.assertEqual(self.codes(findings), ["E302"])
+
+    def test_local_lint_in_personal_defaults(self):
+        for value, expected in (("auto", []), ("always", ["E003"])):
+            self.write(
+                ".keep-the-why",
+                GOOD_CONFIG
+                + "\n<!-- keep-the-why:personal-defaults -->\n"
+                + f"- local-lint: {value}\n"
+                + "<!-- /keep-the-why:personal-defaults -->\n",
+            )
+            findings, _ = self.run_lint()
+            self.assertEqual(self.codes(findings), expected, msg=value)

@@ -1,11 +1,26 @@
 # Keep the Why
 
-> A repo-native convention and agent skill for preserving the reasoning behind a codebase —
-> architecture decisions, rejected alternatives, workarounds, incident learnings, operational
-> constraints that the code alone can't explain. It captures that reasoning as a byproduct of
-> working with your agent — so it stops re-suggesting rejected approaches, gives better
-> answers, speeds up onboarding, and makes legacy projects tractable again. It works
-> continuously as you develop, or retrospectively on an existing repo.
+> The why layer of repo-native project memory: the reasoning behind a codebase as Markdown in the
+> repo, versioned by Git, for coding agents and humans, so nothing rejected is proposed twice.
+
+Keep the Why is the why layer of repo-native project memory (the thesis, by the same author:
+https://oliver-zehentleitner.github.io/repo-native-project-memory/ — the repository already holds what a project is,
+how it works and what changed; context/ is the row it was missing): an agent skill, and
+the file convention it maintains, that preserve the reasoning behind a codebase — architecture
+decisions, rejected alternatives, workarounds, incident learnings, operational constraints that
+the code alone can't explain — in the repo.
+That memory is plain Markdown in `context/`, committed with the code, so Git already provides the
+storage, the history and the distribution: it travels with every clone, branch and fork, and a pull
+request shows the reasoning diff beside the code diff. It captures that reasoning as a byproduct of
+working with your agent, so every later session can use it. Your agent, and every other agent that
+works in the repository, understands not just the code but everything around it: why it is the way
+it is, what was tried and rejected, which constraints the source doesn't show. So does the next
+person. Onboarding gets faster, legacy projects become tractable again. It works continuously as you
+develop, where the reasoning comes for free.
+
+Starting on an existing repository works too, within limits — history, issues and code give back
+only part of the why, a maintainer has to fill in the rest, and that takes real effort. It is never
+too late to begin, though.
 
 The payoff, made concrete: a new hire, or an agent that's never touched the codebase before,
 doesn't have to track down whoever wrote the original code — and doesn't just repeat what was
@@ -30,7 +45,7 @@ get thrown away, not creating separate documentation effort. It isn't magic, tho
 prevents knowledge from decaying on its own. This lowers the friction of the discipline that
 keeps documentation honest; it doesn't replace it.
 
-Version: 0.10.1.
+Version: 0.17.1.
 
 ## Authorship & License
 
@@ -65,6 +80,9 @@ asm install github:oliver-zehentleitner/keep-the-why#latest:skills/keep-the-why 
 
 Replace <tool> with your agent (claude, codex, opencode, cline, gemini, and more — run
 `asm install --help` for the full list).
+Codex plugin: the repository is its own one-plugin marketplace (`.codex-plugin/plugin.json` +
+`.agents/plugins/marketplace.json`) — `codex plugin marketplace add oliver-zehentleitner/keep-the-why`
+then `codex plugin add keep-the-why@keep-the-why`; tested on Codex CLI 0.149.0 (2026-09-08).
 
 Fallback (manual clone) — the skill lives under `skills/keep-the-why/` in this repo, not at the
 root, so clone to a scratch location and copy just that folder rather than cloning the whole repo
@@ -80,11 +98,17 @@ Compatible with Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, Wind
 Antigravity, Amp, Cline, Kimi Code, Pi, Goose, Roo Code, OpenCode, Trae, Factory, JetBrains
 Junie, Warp, and other tools supporting the open Agent Skills format. Full paths per agent: see
 Installation below.
-Also installable as a Claude Code plugin (`.claude-plugin/plugin.json` at the repo root, separate
-from the root `plugin.json` used by GitHub's Copilot CLI plugin marketplace format).
+Also installable as a Claude Code plugin — the repository is its own one-plugin marketplace
+(`.claude-plugin/plugin.json` + `marketplace.json`): `claude plugin marketplace add
+oliver-zehentleitner/keep-the-why --sparse .claude-plugin skills`, then `claude plugin install
+keep-the-why@keep-the-why` (or `/plugin …` inside a session). As a GitHub Copilot CLI plugin:
+`copilot plugin install keep-the-why@awesome-copilot` (the root `plugin.json` serves that
+marketplace's format; the listing pins a release tag).
+Also a Cursor plugin (`.cursor-plugin/plugin.json` + `rules/keep-the-why.mdc`, a rule that loads
+the skill only in a workspace carrying `.keep-the-why`); Cursor marketplace submission pending.
 
-A Skill activates when something in the conversation matches its description, not
-automatically on session start. After installing, start a new session and tell the agent
+Until a start path is configured (autostart, below), a Skill is loaded when something in
+the conversation matches its description, not on session start. After installing, start a new session and tell the agent
 something like "initialize Keep the Why in this project" to run the one-time setup wizard -
 setup on a brand-new project only ever runs from a request like this, never from an unrelated
 question the skill's description happens to match; that's a deliberate gate, not a speed
@@ -94,6 +118,16 @@ is complete), checked directly by this skill at the start of every later session
 of whichever entry-point file a given agent tool reads on its own. Every later session picks
 the project back up without needing to be told again.
 
+What a developer has to do, in full: install the skill (one command, `npx skills add …` above,
+for any of 70+ agents; other routes: https://keepthewhy.com/installation/), say "set up Keep
+the Why here" once per project, answer the setup ("defaults" is a complete answer), then work as usual. Nobody
+has to tell the agent what to record. With the defaults — `capture-mode: proactive`,
+`capture-confirmation: confirm-when-unsure`, and the project carrying its own start path —
+the skill is loaded at the start of every session in that project, the agent records the why
+on its own as it surfaces in normal work, and it asks a short question only when it is
+genuinely unsure whether or how something should be captured. Asking for a capture explicitly
+also works; `explicit-only` is an option for whoever wants only that, not the normal mode.
+
 ## Also Listed On
 
 - ASM: curated skill index for the `asm` CLI, installable via `asm install
@@ -102,6 +136,7 @@ the project back up without needing to be told again.
   https://github.com/VoltAgent/awesome-agent-skills#context-engineering
 - GitHub Copilot plugin marketplace: installable via `copilot plugin install
   keep-the-why@awesome-copilot` — https://awesome-copilot.github.com/plugin/keep-the-why/
+- HOL AI plugin registry: owner-verified listing — https://hol.org/registry/plugins/oliver-zehentleitner%2Fkeep-the-why
 - MCP Market: skill marketplace listing — https://mcpmarket.com/tools/skills/keep-the-why
 - skills.sh: https://skills.sh/oliver-zehentleitner/keep-the-why/keep-the-why — backs
   the `npx skills add` method above
@@ -110,8 +145,8 @@ the project back up without needing to be told again.
 ## Core Concept
 
 Four modes. Every entry is classified on two separate axes: **Evidence** (confirmed / inferred /
-unknown — is this well-supported?) and **Status** (active / superseded / open / needs-review —
-is this still current?) — a superseded decision can still have been confirmed when it was
+unknown — is this well-supported?) and **Status** (active / superseded / open / needs-review /
+pending-confirmation — is this still current?) — a superseded decision can still have been confirmed when it was
 current, so the two don't collapse into one. An entry worth tracing can also carry **Source**
 (who or what it came from), useful at any Evidence level, and **Verification** (corroborated /
 uncorroborated / contradicted) where a confirmed or inferred claim can be checked.
@@ -133,12 +168,23 @@ only the rationale it produces. Live-tested against a real methodology-style fra
 worked correctly once explicitly invoked, but didn't reliably self-trigger the moment a design
 decision settled mid-conversation on its own. Asking directly afterward ("check whether
 keep-the-why applies here") is a reasonable fallback, not a workaround for something broken.
+With a start path in place the skill is loaded in every session (measured on Claude Code,
+and the maintainer's daily experience). Getting it loaded is the agent's job — no skill can
+load itself — and the skill documents three start paths for it (every session machine-wide via a hook, the project asks via a hook or a
+"Keep the Why" section in its entry-point file, or only when a developer asks), with per-agent
+sections stating what is verified how: Claude Code, Codex CLI, opencode and Cline by eval
+(the section loads the skill unprompted 3 of 3 times each, against 0 or 1 of 3 without it),
+Hermes Agent by a live run — https://keepthewhy.com/autostart/
 
 First activation in a project runs a one-time setup: a project wizard (where `context/` lives,
 starting mode, README badge, `capture-confirmation`, `source-reference`, and whether to wire
 the structural linter into CI — GitHub Actions or GitLab CI, detected from the repository) and a separate
 personal wizard (proactive vs. explicit-only capture, `confirmation-flow`,
-update-check/consistency-check intervals) — see https://keepthewhy.com/setup/. When a later
+update-check/consistency-check intervals, and `local-lint` — whether the agent runs the linter
+locally on what it writes, installing it from PyPI unasked or asked first). Each wizard is one
+list with the defaults filled in (`confirmation-flow: batch` is the default), and the defaults
+are the fully integrated setup: proactive capture, `local-lint: auto`, the project asks for the
+skill at session start — see https://keepthewhy.com/setup/. When a later
 skill update requires action from an existing project — a `context/` entry-format change, a
 structural convention (like `context/index.md`'s sort order), a new config default, or a
 storage-location change (like config moving into a dedicated `.keep-the-why` file) — a
@@ -199,15 +245,40 @@ against, and how: https://keepthewhy.com/agent-matrix/
 ## Linting
 
 keep-the-why-lint (PyPI: https://pypi.org/project/keep-the-why-lint/, source in this
-repository under lint/) is a CI linter for the structural half of the format: required entry
+repository under lint/) is a structural linter for the machine-checkable half of the format —
+run in CI after a push, and locally by the skill itself after it writes an entry: required entry
 fields, valid values, index consistency, and `.keep-the-why` integrity. It reads the target
 project's `context-schema` and only enforces what that skill version defines, so unmigrated
 projects don't fail on structure their version never had. Content-level truth is out of its
 scope by design. Versioned `<schema>.<revision>` (e.g. 0.10.1.0), independently of the skill.
-GitHub Actions: `uses: oliver-zehentleitner/keep-the-why@lint-latest` (installs latest from PyPI;
-the `lint-latest` tag moves with every linter publish, `lint-v<version>` pins the action);
-anywhere else: `pip install keep-the-why-lint && ktw-lint .`. Usage, GitLab/pre-commit
-snippets, and every finding code: https://keepthewhy.com/linting/
+GitHub Actions: `uses: oliver-zehentleitner/keep-the-why@lint-latest` — published on the GitHub
+Marketplace as keep-the-why-lint (https://github.com/marketplace/actions/keep-the-why-lint). On
+`@lint-latest` (the default, the tag moves with every linter publish) it installs the newest
+linter; `@lint-v<version>` or a commit SHA pins action and linter together, the `version:`
+input is only for mixing the two; anywhere else: `pip install keep-the-why-lint && ktw-lint .`.
+`ktw-lint . --setup` (local only) also checks the developer's `~/.keep-the-why/<id>.md` and
+`~/.keep-the-why/config`. The personal setting `local-lint: auto | ask | no` (the wizard proposes `auto`; `ask` when the line is absent) makes the
+skill run it after every write and install or update it from PyPI — `ask` never without a yes; the
+linter's version must be at least the skill's, `context-schema` is never lowered to fit an older
+linter. Usage, GitLab/pre-commit snippets, and every finding code: https://keepthewhy.com/linting/
+
+## Dashboard
+
+keep-the-why-dashboard (PyPI: https://pypi.org/project/keep-the-why-dashboard/, source in this
+repository under dashboard/) is a read-only viewer over a project's `context/`, `.keep-the-why`,
+the linter's findings and the Git history of all of it: who created each entry, who last touched
+it, when its Status changed and by whom. `pip install keep-the-why-dashboard && ktw-dashboard` in
+a project serves it on localhost and keeps it current over Server-Sent Events (a `git pull` or an
+entry an agent just wrote shows up within seconds; uncommitted entries carry the author
+`working tree`). Views: overview, force-directed graph (topics as hubs, entries colored by
+Evidence, references as edges), topics and an entry reader with backlinks, queues of what needs
+a person (open, needs-review, pending-confirmation, unknown evidence, Revisit-when triggers),
+timeline by month and author, authors. `ktw-dashboard --export DIR` writes one self-contained
+HTML page (state embedded, no server, no CDN). It writes nothing into any project; the one file
+it keeps is `~/.keep-the-why/dashboard-history.json` (recently opened projects with their
+paths, for the project menu). Standard library plus keep-the-why-lint as the parser; the page is
+one plain JavaScript module. Versioned independently of the skill (`dashboard-v<version>`
+tags). Docs: https://keepthewhy.com/dashboard/
 
 ## Related Work
 
@@ -268,11 +339,17 @@ HTML equivalent and details: https://keepthewhy.com/badge/
 - CHANGELOG: https://github.com/oliver-zehentleitner/keep-the-why/blob/latest/CHANGELOG.md
 - Docs: https://keepthewhy.com
 - Agent & model matrix (which agents/models the skill has actually been run against): https://keepthewhy.com/agent-matrix/
+- Specification (the normative format: config files and fields, the context directory, index skeleton, entry grammar and lifecycle, versioning): https://keepthewhy.com/specification/
 - Setup (project + personal wizards, timer checks): https://keepthewhy.com/setup/
 - Migrations (context-schema version changes): https://keepthewhy.com/migrations/
-- Security (overview, links to trust model and vulnerability reporting): https://keepthewhy.com/security/
+- Security (overview, what automated scanners report and why, links to trust model and vulnerability reporting): https://keepthewhy.com/security/
 - Trust model (context/ as data, not instructions): https://keepthewhy.com/trust-model/
 - Badge: https://keepthewhy.com/badge/
-- Philosophy (why no database/daemon/dashboard, deliberately): https://keepthewhy.com/philosophy/
+- Philosophy (why no database/daemon/account, deliberately — and why the dashboard is a viewer, not a place): https://keepthewhy.com/philosophy/
+- Repo-native project memory (the thesis this is one layer of: the repository is the memory, context/ the missing row; with its limits stated): https://oliver-zehentleitner.github.io/repo-native-project-memory/
+- Dashboard (keep-the-why-dashboard: read-only live view over context/ and its Git history, or a static export): https://keepthewhy.com/dashboard/
 - Why this project is built this way (release/distribution, config format, positioning, compatibility): https://keepthewhy.com/context/release-and-distribution/, https://keepthewhy.com/context/config-format/, https://keepthewhy.com/context/positioning/, https://keepthewhy.com/context/compatibility/
+- Article — the thesis in 800 words: the repository already is the project's memory, one layer was missing, AI changed the cost of capturing it, the experiment, where it is thin: https://blog.technopathy.club/your-repository-already-is-your-project-s-memory-one-layer-was-missing
+- Article — what using it takes: install, one setup sentence per project, answer "defaults" twice, keep coding; after that there is no Keep the Why workflow — the agent captures on its own and asks only when unsure; why `context/` travels with Git instead of a sync service; the why arriving in the same pull request as the code, readable by a human or a review agent; experience accumulating in the project instead of in one person's or one vendor's memory: https://blog.technopathy.club/keep-the-why-is-not-another-workflow
 - Article — origin story and full comparison to prior art: https://blog.technopathy.club/keep-the-why-code-becomes-legacy-when-nobody-remembers-why
+- Article — controlled experiment on the core claim: 10 fresh Claude Code sessions with a rejected alternative recorded in context/ and 10 without, same "simplify this retry wrapper" prompt; without the entry 7/10 re-offered the rejected change, with it 10/10 cited the entry and declined. Transcripts, diffs and grades in the repository under experiments/rejected-change/: https://blog.technopathy.club/what-happens-when-a-coding-agent-forgets-why-a-change-was-rejected

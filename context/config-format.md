@@ -86,6 +86,8 @@ A project can pin `.keep-the-why` to an exact vendored copy (`pinned-version` + 
 
 **Consequence:** if `pinned-path` doesn't exist, this is a hard stop, not a silent fallback to the installed version — see "Pinned versions" in `references/setup.md`. Continuing quietly (even just refusing `context/` writes while everything else proceeds) would itself be a silent-drift failure: the developer wouldn't know the skill had backed off from what the project actually pinned.
 
+**Consequence (0.13.0):** the pinned file is followed only after three mechanical checks — path inside the project, frontmatter `name: keep-the-why`, `metadata.version` equal to `pinned-version` — and a failed check is the same hard stop. Reading the vendored copy directly means a repository-controlled path is handed instruction authority, which is exactly what core rule 11 otherwise denies repository content; the identity check is what keeps that authority scoped to "a copy of this skill at the version the project tested against" rather than "whatever file the config names". Raised by an external review of 0.12.0; the `context` and `id` confinement documented alongside it in `trust-model.md` is the same boundary for the two values that are read rather than followed.
+
 ## `context/` gets `AGENTS.md`/`CLAUDE.md` guard files against hand-written schema edits
 
 **Type:** incident
@@ -107,10 +109,11 @@ Reported externally: a session with the project's Keep the Why setup already com
 **Type:** decision
 **Status:** active
 **Evidence:** confirmed
+**Verification:** corroborated — re-read 2026-09-05 against `references/setup.md`: the split holds; the *files* it originally named (`AGENTS.md` / `AGENTS.local.md` blocks) were replaced by the `.keep-the-why` move above, and this entry's wording was updated to match. An external review of 0.11.0 caught the stale wording — the linter can't, it checks structure.
 
-Where `context/` lives, whether the project has been initialized, and how much confirmation is needed before writing (`capture-confirmation`) are in the committed `AGENTS.md` config block. Capture-mode preference, `confirmation-flow` (how multiple pending confirmations get presented), and the update-check/consistency-check intervals and their last-run timestamps, are in the personal, uncommitted `AGENTS.local.md` block instead. A project can be `init: complete` while a specific developer still gets asked their own preferences, if they don't have an `AGENTS.local.md` yet.
+Where `context/` lives, whether the project has been initialized, and how much confirmation is needed before writing (`capture-confirmation`) are in the committed project config (`.keep-the-why`). Capture-mode preference, `confirmation-flow` (how multiple pending confirmations get presented), and the update-check/consistency-check intervals and their last-run timestamps, are in the personal, uncommitted config (`~/.keep-the-why/<id>.md`) instead. A project can be `init: complete` while a specific developer still gets asked their own preferences, if they don't have a personal file yet.
 
-**Reason:** the first version bundled everything into one committed block. Oliver pointed out that capture-mode and check-interval preferences are individual workflow choices, not project facts — one developer wanting weekly update checks and another wanting none are both fine, and forcing one answer onto everyone (or making it a merge-conflict-prone shared timestamp several sessions race to update) doesn't fit the existing `AGENTS.md`/`AGENTS.local.md` boundary this project already draws for exactly this kind of distinction.
+**Reason:** the first version bundled everything into one committed block. Oliver pointed out that capture-mode and check-interval preferences are individual workflow choices, not project facts — one developer wanting weekly update checks and another wanting none are both fine, and forcing one answer onto everyone (or making it a merge-conflict-prone shared timestamp several sessions race to update) doesn't fit the `AGENTS.md`/`AGENTS.local.md` boundary this project drew at the time for exactly this kind of distinction. The boundary outlived those files: it now runs between `.keep-the-why` and `~/.keep-the-why/<id>.md`.
 
 **Rejected alternative:** one combined block covering both project and personal state, as originally shipped. Rejected once the personal/project distinction became clear — see above.
 
@@ -144,7 +147,7 @@ Every release advances this repo's own `context-schema` (in this file's config b
 **Status:** active
 **Evidence:** confirmed
 
-`references/migrations.md` records what changed in each version that an existing project may need to know about or act on — structural/placement conventions (e.g. `context/index.md`'s sort order) and config defaults added to `AGENTS.md`/`AGENTS.local.md`, not only changes to the `context/` entry format itself. A purely informational entry (a field silently backfilled to a documented default) still gets recorded, just without the migrate-now/defer/decline prompt — that prompt is reserved for entries that actually require doing something.
+`references/migrations.md` records what changed in each version that an existing project may need to know about or act on — structural/placement conventions (e.g. `context/index.md`'s sort order) and config defaults added to the project or personal config file (`.keep-the-why`, `~/.keep-the-why/<id>.md`; the `AGENTS.md`/`AGENTS.local.md` blocks when this was decided), not only changes to the `context/` entry format itself. A purely informational entry (a field silently backfilled to a documented default) still gets recorded, just without the migrate-now/defer/decline prompt — that prompt is reserved for entries that actually require doing something.
 
 **Reason:** raised by Oliver while reviewing the `context/index.md` alphabetical-sort convention (see "`context/index.md` entries are sorted alphabetically by filename" in `context/entry-format.md`) — that change isn't a `context/` entry-format change, so it was initially left out of `migrations.md` on the (unstated, never actually agreed) assumption that the file was format-only. Oliver's position: `migrations.md` exists to answer "what do I need to do after updating," full stop — narrowing it to format changes just meant some actionable changes had nowhere to be tracked. No hard technical reason favored the narrow reading either — `setup.md`'s existing consult mechanism already checks `migrations.md` for entries in the version range between a project's `context-schema` and the installed `metadata.version`, regardless of what kind of change each entry represents, so widening the file's scope needed no change to the trigger logic.
 
@@ -158,7 +161,7 @@ Every release advances this repo's own `context-schema` (in this file's config b
 **Status:** active
 **Evidence:** confirmed
 
-`capture-confirmation` (automatic / confirm-always / confirm-when-unsure — how much permission is needed before writing to `context/`) lives only in the project config block (`AGENTS.md`), with no personal override in this release, even though `capture-mode` and `confirmation-flow` are both personal.
+`capture-confirmation` (automatic / confirm-always / confirm-when-unsure — how much permission is needed before writing to `context/`) lives only in the project config (`.keep-the-why`; the `AGENTS.md` block when this was decided), with no personal override in this release, even though `capture-mode` and `confirmation-flow` are both personal.
 
 **Reason:** Oliver's call: test the setting project-wide first and see how it behaves in practice before deciding whether individual developers should be able to override it. The resolution order (session instruction → personal setting → project setting → default) is deliberately structured so a personal override slots in later without restructuring anything — same pattern as `migration-prompt: <version> declined` — but adding it now, before there's any real usage to learn from, would be guessing at a need rather than confirming one.
 
@@ -179,3 +182,42 @@ New project setting `source-reference` (`always` / `never` / `filtered: <criteri
 **Rejected alternative (the `filtered` mechanism specifically):** a fixed taxonomy of filter categories (by topic file, by Status, by severity) defined by the skill. Rejected in favor of free text the project defines itself — a fixed taxonomy would be guessing at categories before there's real usage to learn from, the same reasoning already applied to keeping `capture-confirmation` project-wide-only for now (see above).
 
 **Consequence:** `always` (or a matching `filtered` criterion) means asking is mandatory, but a reference existing is not — "no, nothing tracks this" is a complete, valid answer. Inventing a plausible-sounding ticket reference to avoid an empty field would violate rule 1 exactly like inventing rationale would. No personal override in this release, same "test one setting before adding a second axis" precedent as `capture-confirmation`.
+
+## `local-lint` is a personal setting with default `ask`, and the linter is brought up to the skill, never the reverse
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer design discussion, 2026-09-08 (two runs with two audiences, the version floor, "lowering the schema is out of the question", "the wizard installs it, with an OK" and "the default should lint" were all maintainer calls; `ask` rather than `auto` as that default was the implementer's proposal, accepted)
+**Revisit when:** the linter is bundled with the skill or runs without an install step, or a project-level "everyone here lints locally" requirement turns out to be wanted
+
+The setting that makes the skill run `keep-the-why-lint` after its own writes lives in `~/.keep-the-why/<id>.md` (`local-lint: auto | ask | no`), is asked by the personal wizard, defaults to `ask`, and can be suggested by a project through `personal-defaults`. The linter's first three version segments must be at least the skill's `metadata.version`; the skill installs or updates the linter to get there (unasked under `auto`, asked under `ask`), and never edits `context-schema` or its own version to meet an older linter.
+
+**Reason:** the CI run and the local run answer different questions. CI checks everyone's entries after the push, so `context/` never receives a malformed entry from anyone; the local run checks what this developer wrote before it is committed, and can see the two home files CI cannot. Whether a tool gets installed and run on a machine is that developer's call, which puts the setting in the personal file rather than `.keep-the-why`. `ask` is the default because the linter should run without anyone opting in — quality by default, the maintainer's call — while nothing gets installed or upgraded on a machine without a yes: the wizard's one-word "defaults" fast path then leads to a question, never to a package. `auto` as the default would have made "installs from PyPI unasked" the skill's out-of-the-box behavior, which is both a fair thing for a security scanner to flag and more than a documentation skill should assume. The floor points the one direction because the schema records which format the project *is* on — moving it to satisfy a tool would falsify that record, while upgrading the tool costs nothing.
+
+**Rejected alternative:** default `no`, opt-in only. Rejected by the maintainer: a check that most developers never turn on guarantees nothing, and `ask` already keeps the install a decision.
+
+**Rejected alternative:** run the linter whenever it happens to be on the path, no setting. Rejected because "installed" is not consent to run after every write, and the update step — the part that needs an install — would then have no policy at all.
+
+**Rejected alternative:** a project-level `local-lint` in `.keep-the-why`, so a team can require it. Rejected for now: a committed file cannot install anything on a developer's machine, so the requirement would be a request in disguise; `personal-defaults` carries the suggestion, which is what a committed file can honestly do.
+
+**Rejected alternative:** run the older linter anyway when the required version is not on PyPI, with a note. Rejected because a linter below the skill's version doesn't know the gates the skill just wrote to, so its "clean" would be no information — saying once that the check is unavailable is more honest than a green line that checks less than it looks.
+
+## Wizard defaults are the fully integrated values; a default is what a new setup gets, not what an absent field means
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer design discussion, 2026-09-08 — "the skill should work as automatically as it can, that is when it works best; whoever wants otherwise takes care of it"; the list of what stays was the maintainer's correction of a broader first draft
+**Revisit when:** a default setup turns out to surprise people in the measurement (a wizard answered "defaults" and then complained about), or a fourth setting joins the three
+
+Three wizard defaults are the values on which the skill is fully integrated: `confirmation-flow: batch` (each wizard is one list with the defaults filled in, one answer), `local-lint: auto` (the question names the install; "defaults" is the go-ahead), and activation by *the project asks* (entry-point section always, hook where verified). Three that could have followed deliberately do not: `capture-confirmation` stays `confirm-when-unsure`, `pending-confirmation-check` stays `no`, and no `personal-defaults` block is written unless asked for. A wizard default applies to a new setup only; an existing file keeps its values, and a line that is absent follows its own rule — `confirmation-flow` absent is asked once, `local-lint` absent means `ask`.
+
+**Reason:** the one-word "defaults" answer should produce a setup that works without anyone opting into anything — that is the setup on which the skill does its job best, and the maintainer's call is that people who want less should be the ones who act. `batch` follows from the same idea: a first setup as one list is two answers, and a developer who prefers one question at a time still gets that by saying so. The line between wizard default and absent-field rule is what keeps the change from reaching machines that never answered the question: a skill update that turned an absent `local-lint` into `auto` would install a package on every existing developer's machine, which is not a default, it is an action nobody consented to.
+
+**Rejected alternative:** a second preset next to "defaults" — "full integration" as a third answer at the wizard's start, with the conservative values staying the defaults. Rejected by the maintainer: two named bundles are a choice most people would not want to make, and a default that is not the recommended setup is a default in name only.
+
+**Rejected alternative:** `capture-confirmation: automatic` as the default, for the same automation argument. Rejected by the maintainer on second look: `confirm-when-unsure` is the right bar — writing without asking is not more integration, it is less judgment, and the setting is project-wide, so one developer's "defaults" would set it for the team.
+
+**Rejected alternative:** `pending-confirmation-check: on-start` and a `personal-defaults` block by default. Rejected because both add output or committed content that a project may not want: a check line at session start where nothing is pending is noise, and a defaults block in `.keep-the-why` is a statement to future developers a first-time setup should not make on its own.
+

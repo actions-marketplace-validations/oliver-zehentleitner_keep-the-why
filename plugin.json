@@ -1,7 +1,7 @@
 {
   "name": "keep-the-why",
-  "description": "Preserves or recovers the reasoning behind a codebase - architectural decisions, rejected alternatives, workarounds, incident learnings, operational constraints, and historical context the code itself cannot explain.",
-  "version": "0.10.1",
+  "description": "Project memory for coding agents and humans: the reasoning behind a codebase as Markdown in the repo, versioned by Git, so nothing rejected is proposed twice.",
+  "version": "0.17.1",
   "author": {
     "name": "Oliver Zehentleitner"
   },

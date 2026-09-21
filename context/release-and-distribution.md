@@ -64,6 +64,34 @@ The `GH Release` workflow's `checkout` step explicitly sets `ref: ${{ github.eve
 
 **Rejected alternative:** leave it as-is, reasoning that we never actually use manual dispatch. Rejected — the input field existing at all implies it's meant to work correctly, and a latent bug that only bites on a rarely-used path is still worth fixing once known.
 
+## `release.yml` gates on the tag agreeing with the commit, not only on the tag's shape
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** external review of 0.12.0, 2026-09-07
+**Revisit when:** a version-carrying file is added or one of the seven moves (the gate's grep list has to follow), or the linter stops being released before the skill
+
+Before `gh release create` and the `latest` move, the workflow compares the tag's version against `SKILL.md`, both plugin manifests, `llms.txt`, this repository's `context-schema`, the linter's `SUPPORTED_SCHEMA`, and the newest `CHANGELOG.md` section, and checks PyPI for a `keep-the-why-lint <version>.x`. Any mismatch fails the run; nothing is created.
+
+**Reason:** the tag is the workflow's only input, and `latest` — what skills.sh and the update check resolve — moves on it. `validate-skill.yml` keeps the files consistent with *each other* on every push, but no push-time check can see a tag that does not exist yet; the only place the tag and the commit meet is this workflow. The PyPI check turns the release checklist's "linter first" order from a convention into a gate: a skill tag ahead of its linter would give every project on the new `context-schema` a `W003` in its next CI run.
+
+**Rejected alternative:** keep the checklist as the only guard. Rejected — every version-carrying file has drifted once already and been caught by a machine; the tag is the one that had none. Also rejected: checking only `SKILL.md`. The other six are as cheap to check and each has its own consumer (plugin marketplaces, `llms.txt` readers, the dogfood lint, the linter's own `W003`).
+
+## Release authority is every write-access account, deliberately unprotected
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** security audit of the whole repository, 2026-09-07; maintainer call the same day
+**Revisit when:** a third account gets write access, or the bot's credentials leave the maintainer's own machine
+
+The `pypi` environment has no required reviewer and no deployment-branch policy, and no tag ruleset restricts `v*`, `latest` or `lint-*`. Anyone with write access can run `publish-lint.yml` and push a skill tag that creates a release and moves `latest`. Write access is two accounts: the maintainer and the assisting agent's bot account, whose token lives on the maintainer's own machine.
+
+**Reason:** the protections would guard against a compromised write-access account, and the only such account besides the maintainer's runs on the maintainer's system — a compromise of one is a compromise of both, so a required-reviewer step would ask the compromised party to approve itself. The releases are run by the agent on the maintainer's explicit request (`CONTRIBUTING.md`, release checklist), which the protection would turn into a two-step dance with no security gained.
+
+**Rejected alternative:** required reviewer on `pypi` plus a tag ruleset allowing only the maintainer. Rejected for now for the reason above; it becomes right the moment the two-accounts-one-machine premise stops holding.
+
 ## skills.sh rides the moving `latest` tag; awesome-copilot needs a pinned release instead
 
 **Type:** decision
@@ -95,6 +123,39 @@ Added `.claude-plugin/plugin.json` (the official Claude Code plugin manifest, ve
 **Rejected alternative:** try to find or invent one manifest format both ecosystems would accept. Rejected — not viable; the two schemas are independently defined by different vendors with different required fields and file locations. Maintaining two small, correctly-targeted manifests is simpler than fighting that.
 
 **Related:** the "Composition with other skills" section in `SKILL.md` was written generically (no specific framework named) rather than tailored to any one methodology-style skill framework we might integrate with — the positioning (cross-cutting persistence, not a workflow orchestrator) is true regardless of which specific framework it's composed alongside, and naming one by name in the skill's own evergreen content would date quickly and read as an unearned endorsement or dependency.
+
+## `.codex-plugin/plugin.json` plus a one-plugin marketplace make the repository installable as a Codex plugin
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer decision after the HOL listing surfaced the gap, 2026-09-08; the install flow tested end to end the same day (Codex CLI 0.149.0, local path and GitHub, the session listing `keep-the-why:keep-the-why`)
+**Revisit when:** Codex changes the manifest or marketplace format, or the install copies something a user should not get (the plugin root is the repository root)
+
+A third manifest, `.codex-plugin/plugin.json` (the official Codex format: `name`, `version`, `description`, `skills: "./skills/"`, plus the optional author/homepage/repository/license/keywords the other two carry), and `.agents/plugins/marketplace.json` listing this repository as a marketplace with one plugin whose `source.path` is `./`. `codex plugin marketplace add oliver-zehentleitner/keep-the-why` then `codex plugin add keep-the-why@keep-the-why` installs it. The release gate checks the third manifest's version like the other two.
+
+**Reason:** Codex has no way to install a plugin from a bare repository — only from a marketplace — so the manifest alone would be a file nobody can use; the marketplace entry is what turns the repository into something `codex plugin add` accepts, and pointing it at `./` keeps everything in one repository. The maintainer's condition was that the flow be tested before the manifest ships, so the installation page carries the two commands with the date and CLI version they were verified against. What prompted it: the HOL catalog derives an `install_url` from this path for every entry in its section, and its scanner's `verify` mode expects it; both were dead ends for a repository that only shipped the Claude Code and Copilot manifests.
+
+**Rejected alternative:** the manifest without the marketplace file, as a catalog fix only. Rejected because it would claim "Codex plugin" for something Codex cannot install — cosmetics for a scanner.
+
+**Rejected alternative:** a separate marketplace repository listing this one. Rejected because it adds a repository to keep in sync for a single entry; `./` as the plugin root does the same job in place. The cost is that the install copies the whole repository (about 13 MB); the skill-directory route on the installation page stays the lean alternative.
+
+## `.cursor-plugin/plugin.json` plus one conditional rule make the repository a Cursor Plugin
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Verification:** corroborated — Cursor 3.19.19, 2026-09-10, three rounds. Round one: the plugin was never active (a symlink under `~/.cursor/plugins/local/` is not loaded, cursor/plugins#35, although Cursor's docs recommend it); a manual load of the skill without `.keep-the-why` behaved as the skill prescribes, no setup unasked. Round two, plugin active from a real clone: a checkout still on the pre-0.10.0 `AGENTS.md` block and without `.keep-the-why` was not recognised, because the rule checked the file only while the session hook honours both; the rule now checks both. Round three: with `.keep-the-why` the skill loaded before the first answer on a neutral request; in a workspace with neither marker nothing about Keep the Why appeared, and switching that session to the project brought the skill in. Details in `autostart.md`, Cursor section
+**Source:** maintainer decision, 2026-09-10, after looking at how another skill-shipping project packages for Cursor
+**Revisit when:** Cursor's review objects to the rule, the manifest format changes, or the rule turns out to fire where it should not
+
+A fourth manifest, `.cursor-plugin/plugin.json` (Cursor's own format, the same fields as the Claude Code one; skills are discovered from `skills/` by layout, no field needed), and one rule, `rules/keep-the-why.mdc`, `alwaysApply: true`, whose whole content is: if the workspace root has a `.keep-the-why` file, load the skill before anything else; otherwise do nothing and never set up unasked. The release gate checks the fourth manifest's version like the other three. The Cursor marketplace (`cursor.com/marketplace`) lists official plugins after a manual review of each version; submission goes through the maintainer's account.
+
+**Reason:** Cursor is the one supported agent without an autostart mechanism of ours — no session hook is verified there — so a plugin-shipped rule is the only way a Cursor session learns on its own that a project uses Keep the Why. The manifest alone would be discovery only, like the Codex one; the rule is what makes the plugin worth more than the skill-directory install.
+
+**Rejected alternative:** a rule carrying the skill's instructions or a summary of them, the way some plugins ship their whole procedure as an always-on rule. Rejected because an always-on rule is injected into every chat in every workspace where the plugin is installed; anything beyond the one conditional sentence is context tax on unrelated projects, and the skill already holds the procedure.
+
+**Rejected alternative:** adding `$schema` to the root `plugin.json` so Cursor reads it as an Agent Plugin (the open format Cursor also accepts). Rejected because that file is the Copilot CLI manifest and the per-vendor-manifest decision above stands; whether Copilot tolerates the extra field is unknown and not worth finding out for one field.
 
 ## The `[x.y.z]` CHANGELOG compare link always 404s on the release PR's own merge-to-main push
 
@@ -128,6 +189,23 @@ Added `.claude-plugin/plugin.json` (the official Claude Code plugin manifest, ve
 
 **Consequence:** the repository root is not a Python package (`pyproject.toml` lives in `lint/`), so a native pre-commit hook repo (`repo: …/keep-the-why`) is not possible — pre-commit users declare a local hook pulling the package from PyPI instead. Accepted as the price of the separation. PyPI releases are tagged `lint-v<version>` by the publish workflow itself, only after a successful upload, so PyPI stays the source of truth and the tag can't disagree with it; `release.yml`'s `v*.*.*` trigger deliberately doesn't match that pattern, so the releases page stays skill-only.
 
+## A release publishes the linter first, then the skill — every time, structural change or not
+
+**Type:** decision
+**Type:** constraint
+**Status:** active
+**Evidence:** confirmed
+**Source:** Oliver, 2026-09-06, when the release checklist was reviewed for completeness after the 0.11.0 follow-up work
+**Revisit when:** the linter stops gating on `context-schema`, or the skill and the linter stop being released from one repository
+
+The release checklist in `CONTRIBUTING.md` is ordered: one preparation PR bumps skill and linter together (`SUPPORTED_SCHEMA` and `__version__` to the new version, gates added if anything structural changed), then `publish-lint.yml` ships the linter to PyPI and moves `lint-latest`, then — only once the new package resolves from PyPI — the skill is tagged. Every skill release gets a linter release, even one that adds no gate.
+
+**Reason:** the linter warns `W003` when a project's `context-schema` is newer than the newest schema it knows. A project that updates the skill the day it ships and advances its `context-schema` — exactly what `setup.md` tells it to do — would lint against a linter that doesn't know the version yet, in its very next CI job, for as long as the linter lags. Publishing the linter first closes that window before it opens; CI keeps working for every current project through the release. The earlier position ("a skill release without structural changes doesn't need a linter release, W003 covers it") traded a release step for a warning that fired precisely on the projects doing the right thing.
+
+**Rejected alternative:** publish both from one tag in one workflow. Tempting, but the two have different failure modes (PyPI trusted publishing vs. a GitHub release) and different cadences (the linter also ships revisions on its own), and a combined workflow that half-succeeds is harder to reason about than two steps with a documented order and a wait between them.
+
+**Consequence:** the release has more steps than it did, and the checklist says so in its first sentence — the order is the point, and a release that skips it isn't done.
+
 ## The GitHub Action rides its own moving `lint-latest` tag, not the skill's `latest`
 
 **Type:** decision
@@ -148,3 +226,114 @@ The consumer snippet references the root composite action as `uses: oliver-zehen
 **Rejected alternative:** move `latest` by hand to a commit that has `action.yml`. Would silently redefine what "latest skill release" means for every skill installer that resolves the same tag.
 
 **Consequence:** an `action.yml` change reaches consumers only through a linter publish — a revision bump such as `0.10.1.1 → 0.10.1.2` even when no check changed. Accepted: a release is the right unit for that, and the fourth version segment exists for exactly this kind of linter-only change.
+
+## The GitHub Action installs the linter its own ref belongs to; `lint-latest` therefore rolls, a pinned ref pins both
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** Oliver, 2026-09-05; the wrapper-only pin was flagged by an external review of 0.11.0, and a first draft of this decision (keep the package floating, document the trap) was reversed the same day
+**Revisit when:** the linter's version ever stops living in a file the action checkout contains
+
+`action.yml` reads `__version__` from `lint/ktw_lint/__init__.py` in its own checkout and installs exactly that, unless `version:` says otherwise. `lint-latest` is moved to the `lint-v<version>` tag after each publish, so on that ref the result is PyPI's newest; on `@lint-v<version>` or `@<sha>` it is the linter that ref was released with. `version: "latest"` forces the newest regardless of ref.
+
+**Reason:** two things at once. Latest must be the default, because a skill release that adds a structural gate is followed by a linter release that knows it, and nobody should have to edit a workflow after every skill update — `@lint-latest` delivers that. And pinning must mean what it means for every other action: the ref fixes everything the action does. A ref that pinned the wrapper while the package kept floating was a trap the review rightly named — the consumers most likely to pin (supply-chain policy) were the ones getting the least reproducibility.
+
+**Rejected alternative:** leaving the package floating on every ref and documenting the trap instead. Drafted, then dropped: "read the docs to learn that pinning doesn't pin" is not a convention anyone expects. Also rejected: a version-derived default only on tagged refs, with `latest` on everything else — two behaviors for one input, and `lint-latest` makes the simple rule produce the right answer anyway.
+
+**Consequence (2026-09-09):** the HOL AI Plugin Scanner reports `ktw-lint.yml`'s `@lint-latest` as an unpinned third-party action, one medium finding per ecosystem it scores, five points each. Accepted, not fixed: pinning this repository's own dogfood run to a SHA would freeze the linter this `context/` is checked against, and the rolling tag is the documented consumer default — the repository should run what it tells consumers to run. `docs/security.md` names the finding and this reason.
+
+**Consequence:** this repository's own `action-smoke` job (`uses: ./` on a PR) passes `version: "latest"` explicitly, because a PR that bumps `__init__.py` names a version PyPI doesn't have yet. A pinned install retries three times with a short pause before failing loud, for the minutes right after a publish when not every mirror has the release.
+
+## `.codexignore` exists for the scanner; whether Codex reads it is unverified
+
+**Type:** decision
+**Status:** active
+**Evidence:** inferred
+**Verification:** uncorroborated
+**Source:** HOL scanner run on PR #350, 2026-09-09 (info finding `CODEXIGNORE_MISSING`); local reproduction on a clean export with scanner 3.0.133
+**Revisit when:** Codex documents an ignore file for plugin packaging or agent reads — then the file's content matters and the "Lean Codex plugin" idea in `TODO.md` becomes actionable
+
+A `.codexignore` at the repository root lists local state and build output, the same patterns as `.gitignore`. The scanner's check is existence only (`check_codexignore` in hol-guard's `best_practices.py`): three points in the Codex ecosystem's Best Practices row, the score moves from 92 to 94.
+
+**Reason:** the file costs nothing and states the right thing — what is not part of the plugin — so the three points are taken. What it does not do is claimed nowhere: openai/codex tracks `.codexignore` as a feature request and a "never respected" bug (issues #205, #6530, #24993), so no behavior of Codex itself, neither agent reads nor `codex plugin add` packaging, is attributed to the file. The header comment in the file says so.
+
+**Rejected alternative:** leaving the info finding open on principle, since no tool is known to read the file. Dropped: the file is honest about its purpose, and a listed project with the finding open would invite the same question from every registry that runs the scanner.
+
+## Bare `v<major>.<minor>.<patch>` tags are reserved for the skill; every other artifact is prefixed
+
+**Type:** decision
+**Type:** constraint
+**Status:** active
+**Evidence:** confirmed
+**Source:** maintainer decision, 2026-09-03, after the first Marketplace release of the action
+**Revisit when:** a release artifact other than the skill needs a bare version tag, or the update check moves off the GitHub releases API
+
+The skill's update check (`references/setup.md`) queries `/releases`, keeps only releases whose `tag_name` matches `^v\d+\.\d+\.\d+$`, and takes the semantic-version maximum. Everything else this repository releases — the linter's `lint-v<version>` tags, the moving `lint-latest` that carries the action's Marketplace listing — must use a prefix, and `release.yml` refuses to build a skill release from a tag that doesn't match the bare pattern.
+
+**Reason:** the update check used `/releases/latest`. GitHub marks the most recently published non-draft, non-prerelease release as "latest", regardless of tag shape — so the moment the action got its own Marketplace release, every skill consumer's update check received `lint-v0.10.1.2` (later `lint-latest`) instead of `v0.10.1`: a tag that doesn't parse as a version after stripping the `v`. The repository now ships more than one releasable artifact, and the check has to say which releases it means rather than trusting GitHub's single "latest" pointer.
+
+**Rejected alternative:** keep `/releases/latest` and re-mark the skill release as latest (`gh release edit v<version> --latest`) after every linter release. Manual, easy to forget, and the Marketplace listing intentionally sits on one long-lived `lint-latest` release that gets re-pointed rather than re-created — every re-point would race the skill release for the "latest" flag again.
+
+**Rejected alternative:** query `/tags` instead of `/releases`. Same filtering needed, but a tag can exist without a release (and without the skill zip), and the tags endpoint carries no draft/prerelease flags.
+
+**Consequence:** the pattern is a contract between three places — the update check, `release.yml`'s guard, and whoever names the next artifact's tags. A prefixed artifact tag that also matches the bare pattern is impossible by construction; a bare tag on a non-skill artifact is what the guard exists to catch.
+
+## The skill's `description` stays under 250 characters, negative-trigger clause last
+
+**Type:** constraint
+**Status:** active
+**Evidence:** confirmed
+**Source:** the asm registry's evaluator (`src/evaluator-core.ts` in luongnv89/asm: "Description fits the runtime context budget", target ≤ 250 chars); #205 (877 → 188 chars, score 71 → 90); PR #223 (188 → 318 → 239)
+**Revisit when:** the Agent Skills spec or a registry this skill is listed on publishes a different budget, or the `/skills` listing stops truncating tail-first
+
+`description` in `SKILL.md`'s frontmatter is the one piece of the skill every agent loads *before* deciding whether to activate it, and the one piece registries show in listings. Both put it on a budget: asm targets ≤ 250 characters and warns above it, and Claude Code's `/skills` listing truncates the tail — so the last clause, "Not for what changed (see Keep a Changelog) - only why", is exactly what gets cut first, and that clause is the negative trigger keeping the skill from activating on plain change-log work. This has been overrun twice: #205 found an 877-character description (score 71/100, C), and the 2026-09-03 evals pass extended it to 318 to make setup, decline, and interview requests match the skill (score 84/100, B, with the truncation warning). Both times the fix was the same: fold the activation-relevant nouns into one dense clause and keep the negative trigger at the end (now 239 characters).
+
+**Reason:** the description is the only text that decides activation — the body is loaded afterwards — so trigger words genuinely belong in it, but they compete for the same budget as the negative clause. Appending a sentence per new trigger family is what blew the budget; compressing the trigger list is what fits. Everything that explains *how* the skill behaves belongs in the body, never in the description.
+
+**Rejected alternative:** keep the longer description and accept the registry warning, on the grounds that activation matters more than a score. Rejected because the warning describes a real loss, not a cosmetic one — a truncated listing drops the negative trigger, so the longer text buys activation on one side and pays for it with mis-activation on the other. Narrowing the description to fewer situations is a different question and was rejected separately (see "Project setup only ever runs from an explicit request" in `compatibility.md`).
+
+**Consequence:** before changing `description`, measure it (`grep -m1 '^description:' skills/keep-the-why/SKILL.md | sed 's/^description: //' | wc -c`, keep ≤ 250) and run `asm eval skills/keep-the-why`; new trigger words go into the existing noun list, not into a new sentence; the "Not for … - only why" clause stays last.
+
+## `LICENSE` is duplicated into `skills/keep-the-why/`, because registries check the skill root
+
+**Type:** constraint
+**Status:** active
+**Evidence:** confirmed
+**Source:** asm evaluator (`scoreLicense`): 10/10 needs a recognised SPDX id in frontmatter *and* a `LICENSE`/`LICENSE.md`/`LICENSE.txt` next to `SKILL.md`; 5/10 with the frontmatter field alone — which is what the registry showed for this skill until PR #223
+**Revisit when:** the installable skill moves back to the repo root, or the license changes (both copies must change together)
+
+The skill lives in a subdirectory (see "The installable skill lives under `skills/keep-the-why/`" above), so the repository's root `LICENSE` is outside the skill root a registry inspects. A verbatim copy sits next to `SKILL.md`. Two files, one license — when it changes, change both.
+
+## Shell fences inside the skill package are ` ```sh `, not ` ```bash `
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** agent-skill-manager v2.14.0 install-time check (its warning patterns: `/\b(bash|sh\s+-c)\b/`, `exec(`, `child_process`, `eval(`, credential-shaped assignments → *High Risk*; any `https?://` → *Medium Risk*); skills.sh audits of 2026-09-03
+**Revisit when:** asm changes what its install check matches, or a snippet genuinely needs bash-only highlighting
+
+The two shell snippets in `references/autostart.md` and `references/ci-linting.md` were fenced ` ```bash `. That word was the package's only match for asm's shell-command pattern and, on its own, turned the label shown at install time into *High Risk*. Fenced as ` ```sh ` the label drops to *Medium Risk*, which is where every skill with a link in it lands and as low as this one can go without removing the license line, the badge, and the OWASP reference.
+
+**Reason:** the change is lossless — the fence language only selects the highlighter, and `sh` renders the same as `bash` on GitHub and in mkdocs — while the label is the first thing a person sees on `asm install`, before any explanation. Explaining the scanner's regex in the docs (which we do, `docs/security.md`) doesn't reach someone deciding at an install prompt.
+
+**Rejected alternative:** leave the fences and only document why the label is wrong. Rejected because it pays a real cost (a red label at the decision point) to avoid a change nobody would notice.
+
+**Rejected alternative:** strip every URL from the package to reach *Safe*. Not possible without dropping the license attribution, the badge markup in `references/setup.md`, and the OWASP link the trust model cites.
+
+**Consequence:** new shell fences under `skills/keep-the-why/` use ` ```sh `. Of the other scanners on skills.sh, Socket and Snyk pass; Gen Agent Trust Hub reported *Warn* / medium in its 2026-09-18 audit of 0.17.0, naming four documented capabilities — pinned versions, reading outsider-authored text, the update check and the PyPI packages, the linter and `uuidgen`. Where a scanner looks at the skill reading issue and pull-request threads during retrospective recovery and interviews, that is the feature and the mitigation is Core rule 11 and `references/trust-model.md`. The label is not chased: it would only move by removing a capability. What is kept right is the public account of it — `docs/security.md` states each auditor's current result and is checked against the three audit pages with every release, after it once still said "all three pass" when one no longer did.
+
+## The repository is its own one-plugin marketplace for Claude Code too, installed with a sparse checkout
+
+**Type:** decision
+**Status:** active
+**Evidence:** confirmed
+**Source:** tested 2026-09-21 on Claude Code 2.1.273, in a throwaway `$HOME`: `claude plugin validate .`, then `marketplace add` and `plugin install` against a local path and against GitHub with a branch ref
+
+`.claude-plugin/marketplace.json` sits next to `.claude-plugin/plugin.json` and lists one plugin with `source: "./"`. `claude plugin marketplace add oliver-zehentleitner/keep-the-why --sparse .claude-plugin skills` followed by `claude plugin install keep-the-why@keep-the-why` installs the skill; `claude plugin details` reports one skill, no hooks, no agents, no MCP servers.
+
+**Reason:** the plugin manifest had been in the repository since the first Claude Code plugin work, but a manifest alone is not installable — Claude Code, like Codex, installs from a marketplace. Waiting for the community marketplace's review left Claude Code, the agent the suite is measured on, as the one major tool without a plugin route. The same one-repository pattern as `.agents/plugins/marketplace.json` for Codex closes that without a second repository to keep in sync.
+
+**Rejected alternative:** a separate marketplace repository — one more place for a version to go stale, for a single plugin. Also rejected: documenting the route without the `--sparse` flag. The plugin root is the repository root, so a plain add copies docs, linter, evals and dashboard (about 13 MB); the sparse checkout brings `.claude-plugin/` and `skills/` plus the root files, about 0.6 MB. Codex has no equivalent flag, which is why that install stays large (`TODO.md`, "Lean Codex plugin").
+
+**Consequence:** the marketplace file carries no version, so the release checklist has nothing to bump there; `plugin.json` next to it is already covered. A `#<tag>` pin works from the first release that contains the file. The plugin ships the skill only — no hook — so the start path is still the setup's job, written into the project where collaborators get it too.
