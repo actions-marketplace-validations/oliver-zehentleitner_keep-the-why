@@ -59,7 +59,58 @@ class FakeHomeEnv(unittest.TestCase):
     def test_bin_dirs_agree_with_path(self):
         env = fake_home_env({}, Path("/fake"))
         self.assertEqual(env["PIPX_BIN_DIR"], env["UV_TOOL_BIN_DIR"])
-        self.assertEqual(env["PATH"], env["PIPX_BIN_DIR"] + ":")
+        self.assertEqual(env["PATH"], env["PIPX_BIN_DIR"])
+
+    def test_operators_local_bin_is_shadowed_without_the_linter(self):
+        real = str(Path.home() / ".local" / "bin")
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "home"
+            env = fake_home_env(
+                {"PATH": f"/usr/local/bin:{real}:/usr/bin:{real}/"}, fake
+            )
+            parts = env["PATH"].split(":")
+            self.assertEqual(parts[0], str(fake / ".local" / "bin"))
+            self.assertNotIn(real, parts)
+            self.assertNotIn(real + "/", parts)
+            shadow = fake / ".local" / "host-bin"
+            if Path(real).is_dir():
+                self.assertEqual(parts[1:], ["/usr/local/bin", str(shadow), "/usr/bin"])
+                for name in ("ktw-lint", "keep-the-why-lint"):
+                    self.assertFalse((shadow / name).exists(), name)
+                    self.assertFalse((shadow / name).is_symlink(), name)
+                real_names = {e.name for e in Path(real).iterdir()} - {
+                    "ktw-lint",
+                    "keep-the-why-lint",
+                }
+                self.assertEqual({e.name for e in shadow.iterdir()}, real_names)
+            else:
+                self.assertEqual(parts[1:], ["/usr/local/bin", "/usr/bin"])
+
+    def test_unwritable_fake_home_still_drops_the_real_bin(self):
+        real = str(Path.home() / ".local" / "bin")
+        env = fake_home_env({"PATH": f"{real}:/usr/bin"}, Path("/fake"))
+        self.assertEqual(env["PATH"], "/fake/.local/bin:/usr/bin")
+
+
+class TolerantCopy(unittest.TestCase):
+    def test_transient_files_are_skipped_and_vanished_sources_tolerated(self):
+        import shutil
+        from ktw_evals.drivers import _copytree_tolerant
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            (src / "sub").mkdir(parents=True)
+            (src / "keep.json").write_text("{}")
+            (src / ".oauth_refresh.lock").write_text("")
+            (src / "sub" / "state.tmp").write_text("")
+            _copytree_tolerant(src, Path(tmp) / "dst")
+            names = {p.name for p in (Path(tmp) / "dst").rglob("*")}
+            self.assertIn("keep.json", names)
+            self.assertNotIn(".oauth_refresh.lock", names)
+            self.assertNotIn("state.tmp", names)
+            # a real error is still raised
+            with self.assertRaises(shutil.Error):
+                raise shutil.Error([("a", "b", "Permission denied")])
 
 
 class SeedFakeHome(unittest.TestCase):
