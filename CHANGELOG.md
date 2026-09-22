@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+
+- The docs state plainly what outside descriptions keep getting wrong: there is no Keep the Why CLI and no init command (three new FAQ entries: the CLI question, why `context/` is visible and where it may live, how the agent finds the right entry through `context/index.md`, linking the article on deterministic write areas); the "Not session memory" boundary on the landing page and in the README now adds that it does the job session memory is wanted for; the index and selective loading are named on the landing page and in the README's Format section, the README linking the deterministic-write-areas article as well; `llms.txt` has a "Plain Facts" block for the same points.
+
 ### Added
 
 - Evals: `tools/evals/regrade.py` (`ktw_evals/regrade.py`, tests) — re-grade stored records with the judge only, several verdicts per record, and report the judge's agreement with itself and with the stored verdict. First measurement in `docs/evals.md`, "What the numbers separate": 139 of 148 records five identical verdicts; 10 of 41 judge-decided failures would pass today, 8 of 88 stored passes fail — drift, not dice.
