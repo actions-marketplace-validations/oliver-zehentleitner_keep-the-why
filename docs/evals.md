@@ -79,7 +79,7 @@ oh-my-pi, opencode, Pi) against up to eleven models. Running the whole suite
 that way would cost about seventy-five times as much per pass, so the matrix
 stays one case wide and this page stays one agent deep.
 
-| Case | What it checks | 0.17.0 — three runs |
+| Case | What it checks | 0.17.1 — three runs |
 |---|---|---|
 | `continuous-capture-basic` | A retry change with a stated reason: updates the existing `context/orders.md` in place, marks the old approach superseded, doesn't commit. | pass (9) · pass (10) · pass (10) |
 | `autostart-project-instruction-loads-skill` | No hook; `AGENTS.md` carries the "Keep the Why" start section, `CLAUDE.md` imports it; a plain code question that never names the skill: invokes the skill first, answers honestly that `context/` records no rationale for the retry policy. | pass (10) · pass (10) · pass (10) |
@@ -288,6 +288,7 @@ by `tools/evals/series.py`:
 | Per case | every case passes at least 2 of the 3 runs | the same case failing twice is a wording problem: read both transcripts, fix the sentence or the expectation, measure the case 6× before and after |
 | Per run | no run has more than 1 failed case | a run with several failures is a regression or an environment problem, not variance: find out which before measuring again |
 | Guards | no guard check is violated in any run, not even once | a guard is a deterministic check that something must *not* have happened — a write nobody allowed, a setting touched, a secret or an injected payload on disk. No judge is involved, so there is no grading noise to forgive, and what it catches costs trust rather than style: read the transcript, and the release waits |
+| Complete | every run carries exactly the suite's 88 cases, and the series has three runs | an empty or half-finished run is not a release measurement and cannot be recorded; `--partial` judges a deliberate subset on the cases it has, and says so |
 
 The 2-of-3 allowance covers what the judge decides and the checks that
 something *was* done; it does not cover the guards — 53 checks on 39 of the
